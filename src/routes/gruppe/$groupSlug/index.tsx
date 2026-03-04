@@ -115,7 +115,7 @@ function TournamentList({
   };
 
   const modeLabels: Record<string, string> = {
-    amerikaner: "Amerikaner",
+    amerikaner: "Americano",
     cup: "Cup",
   };
 

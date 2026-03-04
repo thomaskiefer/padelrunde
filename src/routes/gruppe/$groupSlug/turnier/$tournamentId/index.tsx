@@ -54,7 +54,7 @@ function TournamentView() {
           <h2 className="text-2xl font-bold">{tournament.name}</h2>
           <div className="mt-1 flex gap-2">
             <Badge variant="outline">
-              {tournament.mode === "amerikaner" ? "Amerikaner" : "Cup"}
+              {tournament.mode === "amerikaner" ? "Americano" : "Cup"}
             </Badge>
             <Badge
               variant={

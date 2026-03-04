@@ -114,7 +114,7 @@ function CreateTournament() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="amerikaner">
-                    Amerikaner (4-8 Spieler)
+                    Americano (4-8 Spieler)
                   </SelectItem>
                   <SelectItem value="cup">Cup (8 Spieler)</SelectItem>
                 </SelectContent>

@@ -27,7 +27,7 @@ function Home() {
     <div className="min-h-screen">
       <header className="border-b bg-white p-4">
         <div className="mx-auto flex max-w-4xl items-center justify-between">
-          <h1 className="text-xl font-bold">Paddel-Turnier</h1>
+          <h1 className="text-xl font-bold">PadelRunde</h1>
           {isSignedIn ? (
             <UserButton />
           ) : (
@@ -42,10 +42,10 @@ function Home() {
         {!isSignedIn ? (
           <div className="mt-16 text-center">
             <h2 className="text-3xl font-bold">
-              Willkommen bei Paddel-Turnier
+              Willkommen bei PadelRunde
             </h2>
             <p className="mt-4 text-gray-600">
-              Organisiere Padel-Turniere im Amerikaner- oder Cup-Modus.
+              Organisiere Padel-Turniere im Americano- oder Cup-Modus.
             </p>
             <SignInButton mode="modal">
               <Button size="lg" className="mt-8">
