@@ -1,5 +1,5 @@
 import { ConvexError } from "convex/values";
-import type { QueryCtx, MutationCtx } from "./_generated/server";
+import type { MutationCtx, QueryCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 
 export async function requireAuth(ctx: QueryCtx | MutationCtx) {
@@ -13,9 +13,24 @@ export async function requireAuth(ctx: QueryCtx | MutationCtx) {
   return user;
 }
 
-export async function requireDeveloper(ctx: QueryCtx | MutationCtx) {
+export async function hasActiveGroupMembers(
+  ctx: QueryCtx | MutationCtx,
+  groupId: Id<"groups">
+) {
+  const groupMembers = await ctx.db
+    .query("groupMembers")
+    .withIndex("by_group", (q) => q.eq("groupId", groupId))
+    .collect();
+
+  const activeMembers = await Promise.all(
+    groupMembers.map(async (member) => ctx.db.get("users", member.userId))
+  );
+  return activeMembers.some(Boolean);
+}
+
+export async function requireSuperAdmin(ctx: QueryCtx | MutationCtx) {
   const user = await requireAuth(ctx);
-  if (!user.isDeveloper) throw new ConvexError("Nur für Entwickler");
+  if (!user.isSuperAdmin) throw new ConvexError("Nur fürs Backoffice");
   return user;
 }
 
@@ -23,8 +38,12 @@ export async function requireGroupMember(
   ctx: QueryCtx | MutationCtx,
   groupId: Id<"groups">
 ) {
+  if (!(await hasActiveGroupMembers(ctx, groupId))) {
+    throw new ConvexError("Gruppe nicht gefunden");
+  }
+
   const user = await requireAuth(ctx);
-  if (user.isDeveloper) return { user, membership: null };
+  if (user.isSuperAdmin) return { user, membership: null };
 
   const membership = await ctx.db
     .query("groupMembers")
@@ -40,8 +59,12 @@ export async function requireGroupAdmin(
   ctx: QueryCtx | MutationCtx,
   groupId: Id<"groups">
 ) {
+  if (!(await hasActiveGroupMembers(ctx, groupId))) {
+    throw new ConvexError("Gruppe nicht gefunden");
+  }
+
   const user = await requireAuth(ctx);
-  if (user.isDeveloper) return user;
+  if (user.isSuperAdmin) return user;
 
   const membership = await ctx.db
     .query("groupMembers")

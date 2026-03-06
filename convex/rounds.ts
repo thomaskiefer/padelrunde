@@ -1,9 +1,17 @@
-import { v, ConvexError } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { requireGroupAdmin } from "./helpers";
+import { requireGroupAdmin, requireGroupMember } from "./helpers";
+import { generateAmericanoPairings } from "./model/pairings";
+import { generateKnockoutSeeding, resolveKnockoutAdvancement  } from "./model/knockout";
+import { computeStandings } from "./model/standings";
+
 export const listByTournament = query({
   args: { tournamentId: v.id("tournaments") },
   handler: async (ctx, { tournamentId }) => {
+    const tournament = await ctx.db.get("tournaments", tournamentId);
+    if (!tournament) return [];
+    await requireGroupMember(ctx, tournament.groupId);
+
     return ctx.db
       .query("rounds")
       .withIndex("by_tournament", (q) => q.eq("tournamentId", tournamentId))
@@ -15,7 +23,7 @@ export const listByTournament = query({
 export const generateRounds = mutation({
   args: { tournamentId: v.id("tournaments") },
   handler: async (ctx, { tournamentId }) => {
-    const tournament = await ctx.db.get(tournamentId);
+    const tournament = await ctx.db.get("tournaments", tournamentId);
     if (!tournament) throw new ConvexError("Turnier nicht gefunden");
     await requireGroupAdmin(ctx, tournament.groupId);
 
@@ -26,9 +34,22 @@ export const generateRounds = mutation({
     const playerIds = tournament.playerIds;
     const n = playerIds.length;
     const courts = tournament.courts;
+    const playerValidity = await Promise.all(
+      playerIds.map(async (memberId) => {
+        const member = await ctx.db.get("groupMembers", memberId);
+        if (!member || member.groupId !== tournament.groupId) return false;
+        const memberUser = await ctx.db.get("users", member.userId);
+        return Boolean(memberUser);
+      })
+    );
+    if (playerValidity.some((isValid) => !isValid)) {
+      throw new ConvexError(
+        "Alle Spieler müssen aktive Mitglieder dieser Gruppe sein"
+      );
+    }
 
     // Generate pairings using round-robin partner rotation
-    const pairings = generateAmericanerPairings(n);
+    const pairings = generateAmericanoPairings(n);
 
     // Determine how many rounds to play
     const maxRounds = tournament.mode === "cup" ? 5 : n - 1;
@@ -55,108 +76,171 @@ export const generateRounds = mutation({
       }
     }
 
-    await ctx.db.patch(tournamentId, { status: "active" });
+    await ctx.db.patch("tournaments", tournamentId, { status: "active" });
   },
 });
 
-// Pure algorithm: generates round-robin partner pairings for N players
-// Returns array of rounds, each containing matches with player indices
-function generateAmericanerPairings(
-  n: number
-): Array<Array<{ teamA: [number, number]; teamB: [number, number] }>> {
-  // Track partner history (who has been partners with whom)
-  const partnered: boolean[][] = Array.from({ length: n }, () =>
-    Array(n).fill(false)
-  );
-  // Track opponent count
-  const opponentCount: number[][] = Array.from({ length: n }, () =>
-    Array(n).fill(0)
-  );
+// Generate knockout rounds (semifinals) from preliminary standings
+export const generateKnockoutRounds = mutation({
+  args: { tournamentId: v.id("tournaments") },
+  handler: async (ctx, { tournamentId }) => {
+    const tournament = await ctx.db.get("tournaments", tournamentId);
+    if (!tournament) throw new ConvexError("Turnier nicht gefunden");
+    await requireGroupAdmin(ctx, tournament.groupId);
 
-  const rounds: Array<
-    Array<{ teamA: [number, number]; teamB: [number, number] }>
-  > = [];
-
-  const totalRounds = n - 1;
-
-  for (let r = 0; r < totalRounds; r++) {
-    const available = Array.from({ length: n }, (_, i) => i);
-    const roundMatches: Array<{
-      teamA: [number, number];
-      teamB: [number, number];
-    }> = [];
-
-    while (available.length >= 4) {
-      // Find best team A (prefer players who haven't partnered)
-      let bestTeamA: [number, number] | null = null;
-      let bestTeamAScore = Infinity;
-
-      for (let i = 0; i < available.length; i++) {
-        for (let j = i + 1; j < available.length; j++) {
-          const a = available[i];
-          const b = available[j];
-          const score = partnered[a][b] ? 1 : 0;
-          if (score < bestTeamAScore) {
-            bestTeamAScore = score;
-            bestTeamA = [a, b];
-            if (score === 0) break;
-          }
-        }
-        if (bestTeamAScore === 0) break;
-      }
-
-      if (!bestTeamA) break;
-
-      const remainingAfterA = available.filter(
-        (x) => x !== bestTeamA![0] && x !== bestTeamA![1]
-      );
-
-      // Find best team B (prefer new partners, minimize opponent repeats)
-      let bestTeamB: [number, number] | null = null;
-      let bestTeamBScore = Infinity;
-
-      for (let i = 0; i < remainingAfterA.length; i++) {
-        for (let j = i + 1; j < remainingAfterA.length; j++) {
-          const c = remainingAfterA[i];
-          const d = remainingAfterA[j];
-          const partnerScore = partnered[c][d] ? 10 : 0;
-          const oppScore =
-            opponentCount[bestTeamA[0]][c] +
-            opponentCount[bestTeamA[0]][d] +
-            opponentCount[bestTeamA[1]][c] +
-            opponentCount[bestTeamA[1]][d];
-          const score = partnerScore + oppScore;
-          if (score < bestTeamBScore) {
-            bestTeamBScore = score;
-            bestTeamB = [c, d];
-          }
-        }
-      }
-
-      if (!bestTeamB) break;
-
-      // Update tracking
-      partnered[bestTeamA[0]][bestTeamA[1]] = true;
-      partnered[bestTeamA[1]][bestTeamA[0]] = true;
-      partnered[bestTeamB[0]][bestTeamB[1]] = true;
-      partnered[bestTeamB[1]][bestTeamB[0]] = true;
-
-      for (const a of bestTeamA) {
-        for (const b of bestTeamB) {
-          opponentCount[a][b]++;
-          opponentCount[b][a]++;
-        }
-      }
-
-      roundMatches.push({ teamA: bestTeamA, teamB: bestTeamB });
-
-      // Remove used players from available
-      const used = new Set([...bestTeamA, ...bestTeamB]);
-      available.splice(0, available.length, ...available.filter((x) => !used.has(x)));
+    if (tournament.mode !== "cup") {
+      throw new ConvexError("K.O.-Phase nur im Cup-Modus");
+    }
+    if (tournament.status !== "active") {
+      throw new ConvexError("Turnier muss aktiv sein");
     }
 
-    rounds.push(roundMatches);
-  }
+    // Verify all preliminary matches are completed
+    const rounds = await ctx.db
+      .query("rounds")
+      .withIndex("by_tournament", (q) => q.eq("tournamentId", tournamentId))
+      .collect();
+    const prelimRounds = rounds.filter((r) => r.phase === "preliminary");
+    const prelimRoundIds = new Set(prelimRounds.map((r) => r._id));
 
-  return rounds;
-}
+    const allMatches = await ctx.db
+      .query("matches")
+      .withIndex("by_tournament", (q) => q.eq("tournamentId", tournamentId))
+      .collect();
+    const prelimMatches = allMatches.filter((m) => prelimRoundIds.has(m.roundId));
+
+    if (prelimMatches.some((m) => m.status !== "completed")) {
+      throw new ConvexError("Alle Vorrundenspiele müssen abgeschlossen sein");
+    }
+
+    // Compute standings from preliminary matches
+    const completedMatches = prelimMatches
+      .filter((m) => m.scoreA !== undefined && m.scoreB !== undefined)
+      .map((m) => ({
+        teamA: m.teamA as Array<string>,
+        teamB: m.teamB as Array<string>,
+        scoreA: m.scoreA!,
+        scoreB: m.scoreB!,
+      }));
+
+    const displayNames: Record<string, string> = {};
+    for (const playerId of tournament.playerIds) {
+      const member = await ctx.db.get("groupMembers", playerId);
+      displayNames[playerId] = member?.displayName ?? "?";
+    }
+
+    const standings = computeStandings(
+      tournament.playerIds as Array<string>,
+      displayNames,
+      completedMatches
+    );
+
+    // Generate knockout seeding
+    const bracket = generateKnockoutSeeding(standings);
+
+    // Create semifinal round
+    const sfRoundId = await ctx.db.insert("rounds", {
+      tournamentId,
+      roundNumber: prelimRounds.length + 1,
+      phase: "semifinal",
+    });
+
+    // Insert SF1 and SF2
+    for (let i = 0; i < bracket.semifinals.length; i++) {
+      const sf = bracket.semifinals[i];
+      await ctx.db.insert("matches", {
+        roundId: sfRoundId,
+        tournamentId,
+        court: (i % tournament.courts) + 1,
+        teamA: sf.teamA as any,
+        teamB: sf.teamB as any,
+        status: "scheduled",
+      });
+    }
+
+    await ctx.db.patch("tournaments", tournamentId, { status: "knockout" });
+  },
+});
+
+// After semifinals complete, create final + bronze matches
+export const advanceToFinals = mutation({
+  args: { tournamentId: v.id("tournaments") },
+  handler: async (ctx, { tournamentId }) => {
+    const tournament = await ctx.db.get("tournaments", tournamentId);
+    if (!tournament) throw new ConvexError("Turnier nicht gefunden");
+    await requireGroupAdmin(ctx, tournament.groupId);
+
+    if (tournament.status !== "knockout") {
+      throw new ConvexError("Turnier muss in K.O.-Phase sein");
+    }
+
+    // Find semifinal round and matches
+    const rounds = await ctx.db
+      .query("rounds")
+      .withIndex("by_tournament", (q) => q.eq("tournamentId", tournamentId))
+      .collect();
+    const sfRound = rounds.find((r) => r.phase === "semifinal");
+    if (!sfRound) throw new ConvexError("Halbfinalrunde nicht gefunden");
+
+    const sfMatches = await ctx.db
+      .query("matches")
+      .withIndex("by_round", (q) => q.eq("roundId", sfRound._id))
+      .collect();
+
+    if (sfMatches.length !== 2) {
+      throw new ConvexError("Genau 2 Halbfinalspiele erwartet");
+    }
+    if (sfMatches.some((m) => m.status !== "completed" || !m.winningSide)) {
+      throw new ConvexError("Beide Halbfinalspiele müssen abgeschlossen sein");
+    }
+
+    // Check if final/bronze already exist
+    if (rounds.some((r) => r.phase === "final" || r.phase === "bronze")) {
+      throw new ConvexError("Finale wurde bereits erstellt");
+    }
+
+    const advancement = resolveKnockoutAdvancement(
+      {
+        teamA: sfMatches[0].teamA as Array<string>,
+        teamB: sfMatches[0].teamB as Array<string>,
+        winningSide: sfMatches[0].winningSide!,
+      },
+      {
+        teamA: sfMatches[1].teamA as Array<string>,
+        teamB: sfMatches[1].teamB as Array<string>,
+        winningSide: sfMatches[1].winningSide!,
+      }
+    );
+
+    // Create final round
+    const finalRoundId = await ctx.db.insert("rounds", {
+      tournamentId,
+      roundNumber: sfRound.roundNumber + 1,
+      phase: "final",
+    });
+    await ctx.db.insert("matches", {
+      roundId: finalRoundId,
+      tournamentId,
+      court: 1,
+      teamA: advancement.finalTeamA as any,
+      teamB: advancement.finalTeamB as any,
+      status: "scheduled",
+    });
+
+    // Create bronze round
+    const bronzeRoundId = await ctx.db.insert("rounds", {
+      tournamentId,
+      roundNumber: sfRound.roundNumber + 2,
+      phase: "bronze",
+    });
+    const bronzeCourt = tournament.courts > 1 ? 2 : 1;
+    await ctx.db.insert("matches", {
+      roundId: bronzeRoundId,
+      tournamentId,
+      court: bronzeCourt,
+      teamA: advancement.bronzeTeamA as any,
+      teamB: advancement.bronzeTeamB as any,
+      status: "scheduled",
+    });
+  },
+});

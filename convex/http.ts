@@ -1,8 +1,8 @@
 import { httpRouter } from "convex/server";
+import { Webhook } from "svix";
 import { httpAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { WebhookEvent } from "@clerk/backend";
-import { Webhook } from "svix";
 
 const http = httpRouter();
 
@@ -20,11 +20,12 @@ http.route({
       case "user.updated":
         await ctx.runMutation(internal.users.upsertFromClerk, {
           data: {
-            id: event.data.id!,
-            first_name: event.data.first_name ?? "",
-            last_name: event.data.last_name ?? "",
-            email_addresses: event.data.email_addresses ?? [],
-            image_url: event.data.image_url ?? undefined,
+            id: event.data.id,
+            name: [event.data.first_name, event.data.last_name]
+              .filter(Boolean)
+              .join(" "),
+            email: event.data.email_addresses[0]?.email_address || "",
+            imageUrl: event.data.image_url,
           },
         });
         break;
@@ -48,9 +49,14 @@ async function validateRequest(req: Request): Promise<WebhookEvent | null> {
     "svix-timestamp": req.headers.get("svix-timestamp")!,
     "svix-signature": req.headers.get("svix-signature")!,
   };
-  const wh = new Webhook(process.env.CLERK_WEBHOOK_SECRET!);
+  const webhookSecret = process.env.CLERK_WEBHOOK_SECRET;
+  if (!webhookSecret) {
+    console.error("Missing CLERK_WEBHOOK_SECRET");
+    return null;
+  }
   try {
-    return wh.verify(payloadString, svixHeaders) as unknown as WebhookEvent;
+    const wh = new Webhook(webhookSecret);
+    return wh.verify(payloadString, svixHeaders) as WebhookEvent;
   } catch (error) {
     console.error("Error verifying webhook event", error);
     return null;

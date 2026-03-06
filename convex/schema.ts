@@ -7,7 +7,7 @@ export default defineSchema({
     name: v.string(),
     email: v.string(),
     avatarUrl: v.optional(v.string()),
-    isDeveloper: v.boolean(),
+    isSuperAdmin: v.boolean(),
     canCreateGroup: v.boolean(),
     hasCreatedGroup: v.boolean(),
   })
@@ -35,7 +35,7 @@ export default defineSchema({
   tournaments: defineTable({
     groupId: v.id("groups"),
     name: v.string(),
-    mode: v.union(v.literal("amerikaner"), v.literal("cup")),
+    mode: v.union(v.literal("americano"), v.literal("cup")),
     status: v.union(
       v.literal("setup"),
       v.literal("active"),

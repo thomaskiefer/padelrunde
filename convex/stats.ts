@@ -1,16 +1,16 @@
 import { v } from "convex/values";
 import { query } from "./_generated/server";
 import { requireGroupMember } from "./helpers";
-import { computeStandings } from "./model/standings";
+import { computePartnerOpponentStats } from "./model/stats";
 
-export const getStandings = query({
+export const getStats = query({
   args: { tournamentId: v.id("tournaments") },
   handler: async (ctx, { tournamentId }) => {
     const tournament = await ctx.db.get("tournaments", tournamentId);
     if (!tournament) return [];
     await requireGroupMember(ctx, tournament.groupId);
 
-    // Get preliminary rounds only (knockout results don't affect standings)
+    // Only count preliminary matches for stats
     const rounds = await ctx.db
       .query("rounds")
       .withIndex("by_tournament", (q) => q.eq("tournamentId", tournamentId))
@@ -35,8 +35,6 @@ export const getStandings = query({
       .map((m) => ({
         teamA: m.teamA as Array<string>,
         teamB: m.teamB as Array<string>,
-        scoreA: m.scoreA!,
-        scoreB: m.scoreB!,
       }));
 
     // Build display name map
@@ -46,7 +44,7 @@ export const getStandings = query({
       displayNames[playerId] = member?.displayName ?? "?";
     }
 
-    return computeStandings(
+    return computePartnerOpponentStats(
       tournament.playerIds as Array<string>,
       displayNames,
       completedMatches
