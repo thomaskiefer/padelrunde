@@ -1,19 +1,14 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { useSuspenseQuery } from "@tanstack/react-query";
+import { Link, createFileRoute } from "@tanstack/react-router";
+import { useQuery, useSuspenseQuery } from "@tanstack/react-query";
 import { useMutation } from "convex/react";
 import { convexQuery } from "@convex-dev/react-query";
+import { useEffect, useState } from "react";
 import { api } from "../../../../../../convex/_generated/api";
-import { Button } from "~/components/ui/button";
-import { Input } from "~/components/ui/input";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "~/components/ui/card";
-import { Badge } from "~/components/ui/badge";
-import { useState } from "react";
+import { resolveTournamentAdminAccess } from "../../access";
 import type { Id } from "../../../../../../convex/_generated/dataModel";
+import { Button } from "~/components/ui/button";
+import { cn } from "~/lib/utils";
+import { KNOCKOUT_PHASES, phaseLabels } from "~/lib/tournament";
 
 export const Route = createFileRoute(
   "/gruppe/$groupSlug/turnier/$tournamentId/admin"
@@ -21,61 +16,219 @@ export const Route = createFileRoute(
   component: TournamentAdmin,
 });
 
-function TournamentAdmin() {
+export function TournamentAdmin() {
   const { groupSlug, tournamentId } = Route.useParams();
+  const tid = tournamentId as Id<"tournaments">;
+  const { data: me } = useSuspenseQuery(convexQuery(api.users.me, {}));
   const { data: tournament } = useSuspenseQuery(
-    convexQuery(api.tournaments.get, {
-      tournamentId: tournamentId as Id<"tournaments">,
-    })
+    convexQuery(api.tournaments.get, { tournamentId: tid })
   );
-  const { data: rounds } = useSuspenseQuery(
-    convexQuery(api.rounds.listByTournament, {
-      tournamentId: tournamentId as Id<"tournaments">,
-    })
-  );
+  const { data: members = [], isLoading: membersLoading } = useQuery({
+    ...convexQuery(api.groups.getMembers, {
+      groupId: (tournament?.groupId ?? "missing") as any,
+    }),
+    enabled: !!tournament,
+  });
+  const { data: rounds = [], isLoading: roundsLoading } = useQuery({
+    ...convexQuery(api.rounds.listByTournament, { tournamentId: tid }),
+    enabled: !!tournament,
+  });
   const updateStatus = useMutation(api.tournaments.updateStatus);
+  const generateKnockout = useMutation(api.rounds.generateKnockoutRounds);
+  const advanceToFinals = useMutation(api.rounds.advanceToFinals);
+
+  const [confirmFinish, setConfirmFinish] = useState(false);
+  const [actionError, setActionError] = useState("");
+  const [actionLoading, setActionLoading] = useState<
+    "knockout" | "finals" | "finish" | null
+  >(null);
+
+  const { data: prelimDone = false, isLoading: prelimDoneLoading } = useQuery({
+    ...convexQuery(api.matches.allMatchesCompletedForPhase, {
+      tournamentId: tid,
+      phase: "preliminary",
+    }),
+    enabled: !!tournament,
+  });
+  const { data: sfDone = false, isLoading: sfDoneLoading } = useQuery({
+    ...convexQuery(api.matches.allMatchesCompletedForPhase, {
+      tournamentId: tid,
+      phase: "semifinal",
+    }),
+    enabled: !!tournament,
+  });
+  const { data: finalDone = false, isLoading: finalDoneLoading } = useQuery({
+    ...convexQuery(api.matches.allMatchesCompletedForPhase, {
+      tournamentId: tid,
+      phase: "final",
+    }),
+    enabled: !!tournament,
+  });
+  const { data: bronzeDone = false, isLoading: bronzeDoneLoading } = useQuery({
+    ...convexQuery(api.matches.allMatchesCompletedForPhase, {
+      tournamentId: tid,
+      phase: "bronze",
+    }),
+    enabled: !!tournament,
+  });
 
   if (!tournament) {
-    return <div className="p-8 text-center">Turnier nicht gefunden</div>;
+    return (
+      <div className="mx-auto max-w-5xl p-4 mt-12 text-center animate-fade-in-up">
+        <h2 className="font-display text-xl uppercase text-brand-navy mb-2">Turnier nicht gefunden</h2>
+        <Link
+          to="/gruppe/$groupSlug"
+          params={{ groupSlug }}
+          className="text-[10px] uppercase tracking-[0.2em] font-bold text-gray-400 hover:text-brand-red transition-colors flex items-center gap-1.5 justify-center"
+        >
+          <span className="text-lg leading-none" aria-hidden="true">&larr;</span> Zurück zur Gruppe
+        </Link>
+      </div>
+    );
   }
 
+  if (roundsLoading || prelimDoneLoading || sfDoneLoading || finalDoneLoading || bronzeDoneLoading) {
+    return <div className="mx-auto max-w-5xl p-4 mt-12 text-center">Turnier wird geladen...</div>;
+  }
+
+  const access = resolveTournamentAdminAccess(me ?? null, members, membersLoading);
+  if (access === "loading") {
+    return <div className="mx-auto max-w-5xl p-4 mt-12 text-center">Lade Berechtigungen...</div>;
+  }
+
+  if (access === "denied") {
+    return (
+      <div className="mx-auto max-w-5xl p-4 mt-12 text-center animate-fade-in-up">
+        <h2 className="font-display text-xl uppercase text-brand-navy mb-2">Keine Berechtigung</h2>
+        <p className="text-gray-500 text-sm mb-4">
+          Nur Gruppen-Admins dürfen diese Seite öffnen.
+        </p>
+        <Link
+          to="/gruppe/$groupSlug/turnier/$tournamentId"
+          params={{ groupSlug, tournamentId }}
+          className="text-[10px] uppercase tracking-[0.2em] font-bold text-gray-400 hover:text-brand-red transition-colors flex items-center gap-1.5 justify-center"
+        >
+          <span className="text-lg leading-none" aria-hidden="true">&larr;</span> Zurück zum Turnier
+        </Link>
+      </div>
+    );
+  }
+
+  const hasFinal = rounds.some((r) => r.phase === "final");
+  const canFinishTournament =
+    tournament.mode === "americano" ? prelimDone : finalDone && bronzeDone;
+
+  const runAction = async (
+    action: "knockout" | "finals" | "finish",
+    fn: () => Promise<void>
+  ) => {
+    setActionError("");
+    setActionLoading(action);
+    try {
+      await fn();
+      return true;
+    } catch (err: any) {
+      setActionError(err.message ?? "Aktion fehlgeschlagen");
+      return false;
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   return (
-    <div className="mx-auto max-w-4xl p-4 space-y-6">
+    <div className="mx-auto max-w-5xl p-4 space-y-6 animate-fade-in-up">
       <div>
         <Link
           to="/gruppe/$groupSlug/turnier/$tournamentId"
           params={{ groupSlug, tournamentId }}
-          className="text-sm text-gray-500 hover:underline"
+          className="text-[10px] uppercase tracking-[0.2em] font-bold text-gray-400 hover:text-brand-red transition-colors flex items-center gap-1.5"
         >
-          Zurück zum Turnier
+          <span className="text-lg leading-none" aria-hidden="true">&larr;</span> Zurück zum Turnier
         </Link>
-        <h2 className="text-2xl font-bold">Verwaltung: {tournament.name}</h2>
+        <p className="text-[10px] uppercase tracking-widest font-bold text-gray-400 mt-2">Verwaltung</p>
+        <h2 className="text-xl sm:text-2xl font-display uppercase text-brand-navy truncate">
+          {tournament.name}
+        </h2>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Turnier-Status</CardTitle>
-        </CardHeader>
-        <CardContent className="flex gap-2">
-          {tournament.status !== "finished" && (
+      <div className="bg-gradient-to-br from-brand-navy to-[#142a47] text-white rounded-xl p-4 sm:p-6 shadow-lg">
+        <h3 className="section-title-accent font-display uppercase tracking-wide text-sm sm:text-base text-white mb-4">
+          Turnier-Status
+        </h3>
+        <div className="flex flex-wrap gap-2">
+          {tournament.mode === "cup" &&
+            tournament.status === "active" &&
+            prelimDone && (
+              <Button
+                variant="brand"
+                size="touchLg"
+                onClick={() =>
+                  runAction("knockout", async () => {
+                    await generateKnockout({ tournamentId: tid });
+                  })
+                }
+                disabled={actionLoading !== null}
+              >
+                Zur K.O.-Phase
+              </Button>
+            )}
+
+          {tournament.status === "knockout" && sfDone && !hasFinal && (
             <Button
-              variant="destructive"
-              size="sm"
+              variant="brandTeal"
+              size="touchLg"
               onClick={() =>
-                updateStatus({
-                  tournamentId: tournamentId as Id<"tournaments">,
-                  status: "finished",
+                runAction("finals", async () => {
+                  await advanceToFinals({ tournamentId: tid });
                 })
               }
+              disabled={actionLoading !== null}
+            >
+              {"Finale & Bronzespiel erstellen"}
+            </Button>
+          )}
+
+          {tournament.status !== "finished" && !confirmFinish && canFinishTournament && (
+            <Button
+              variant="brandDestructive"
+              size="touchLg"
+              onClick={() => setConfirmFinish(true)}
+              disabled={actionLoading !== null}
             >
               Turnier beenden
             </Button>
           )}
-        </CardContent>
-      </Card>
+          {confirmFinish && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-sm text-white/80">Wirklich beenden?</span>
+              <Button
+                variant="brandDestructive"
+                size="touchLg"
+                onClick={async () => {
+                  const success = await runAction("finish", async () => {
+                    await updateStatus({ tournamentId: tid, status: "finished" });
+                  });
+                  if (success) setConfirmFinish(false);
+                }}
+                disabled={actionLoading !== null}
+              >
+                Ja, beenden
+              </Button>
+              <Button
+                variant="brandGhost"
+                size="touchLg"
+                onClick={() => setConfirmFinish(false)}
+              >
+                Abbrechen
+              </Button>
+            </div>
+          )}
+        </div>
+        {actionError && <p className="mt-3 text-sm text-red-200" role="alert">{actionError}</p>}
+      </div>
 
       <div className="space-y-6">
-        {rounds
+        {[...rounds]
           .sort((a, b) => a.roundNumber - b.roundNumber)
           .map((round) => (
             <AdminRoundSection
@@ -103,92 +256,177 @@ function AdminRoundSection({
     convexQuery(api.matches.getByRound, { roundId })
   );
 
-  const phaseLabels: Record<string, string> = {
-    preliminary: "Vorrunde",
-    semifinal: "Halbfinale",
-    bronze: "Spiel um Platz 3",
-    final: "Finale",
-  };
+  const isKnockout = KNOCKOUT_PHASES.has(phase);
+  const label = phaseLabels[phase] ?? phase;
+  const title = isKnockout ? label : `${label} ${roundNumber}`;
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-lg">
-          {phaseLabels[phase] ?? phase} {roundNumber}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <div className="border-b border-gray-200 pb-6">
+      <h3
+        className={cn(
+          "font-display uppercase text-base tracking-wide mb-4",
+          isKnockout ? "text-brand-red" : "text-brand-navy"
+        )}
+      >
+        {title}
+      </h3>
+      <div className="space-y-4">
         {matches.map((match) => (
-          <AdminMatchRow key={match._id} match={match} />
+          <AdminMatchRow
+            key={match._id}
+            match={match}
+            isKnockout={isKnockout}
+          />
         ))}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
 
 function AdminMatchRow({
   match,
+  isKnockout,
 }: {
   match: {
     _id: Id<"matches">;
-    teamANames: string[];
-    teamBNames: string[];
+    teamANames: Array<string>;
+    teamBNames: Array<string>;
     scoreA?: number;
     scoreB?: number;
+    winningSide?: "A" | "B";
     status: string;
   };
+  isKnockout: boolean;
 }) {
   const adminEditScore = useMutation(api.matches.adminEditScore);
   const [scoreA, setScoreA] = useState(String(match.scoreA ?? ""));
   const [scoreB, setScoreB] = useState(String(match.scoreB ?? ""));
+  const [winningSide, setWinningSide] = useState<"A" | "B" | undefined>(
+    match.winningSide
+  );
   const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setScoreA(String(match.scoreA ?? ""));
+    setScoreB(String(match.scoreB ?? ""));
+    setWinningSide(match.winningSide);
+  }, [match.scoreA, match.scoreB, match.winningSide]);
+
+  const aVal = scoreA === "" ? NaN : Number(scoreA);
+  const bVal = scoreB === "" ? NaN : Number(scoreB);
+  const isValid = !isNaN(aVal) && !isNaN(bVal) && aVal + bVal === 32 && aVal >= 0 && bVal >= 0;
+  const isTie = isValid && aVal === bVal;
 
   const handleSave = async () => {
     setError("");
-    const a = Number(scoreA);
-    const b = Number(scoreB);
-    if (isNaN(a) || isNaN(b) || a + b !== 32 || a < 0 || b < 0) {
+    if (!isValid) {
       setError("Punkte müssen zusammen 32 ergeben");
       return;
     }
+    if (isKnockout && isTie && !winningSide) {
+      setError("Gewinner muss bestimmt werden");
+      return;
+    }
+    setSaving(true);
     try {
-      await adminEditScore({ matchId: match._id, scoreA: a, scoreB: b });
+      await adminEditScore({
+        matchId: match._id,
+        scoreA: aVal,
+        scoreB: bVal,
+        winningSide: isTie ? winningSide : undefined,
+      });
     } catch (err: any) {
       setError(err.message ?? "Fehler");
+    } finally {
+      setSaving(false);
     }
   };
 
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded border p-3">
-      <span className="font-medium">
-        {match.teamANames.join(" & ")}
-      </span>
-      <span className="text-gray-400">vs</span>
-      <span className="font-medium">
-        {match.teamBNames.join(" & ")}
-      </span>
-      <div className="ml-auto flex items-center gap-2">
-        <Input
-          className="w-16 text-center"
-          value={scoreA}
-          onChange={(e) => setScoreA(e.target.value)}
-        />
-        <span>:</span>
-        <Input
-          className="w-16 text-center"
-          value={scoreB}
-          onChange={(e) => setScoreB(e.target.value)}
-        />
-        <Button size="sm" onClick={handleSave}>
-          Speichern
-        </Button>
+    <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm space-y-4">
+      <div className="flex items-center justify-between text-[10px] uppercase tracking-widest font-bold text-gray-400 border-b border-gray-50 pb-2">
+        <span>Admin-Bearbeitung</span>
         {match.status === "completed" && (
-          <Badge variant="secondary">Eingetragen</Badge>
+          <span className="text-brand-teal">Abgeschlossen</span>
         )}
       </div>
-      {error && (
-        <p className="w-full text-sm text-red-600">{error}</p>
+
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+        <div className="text-right min-w-0">
+          <p className="text-xs font-bold text-brand-navy truncate">
+            {match.teamANames.join(" & ")}
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <input
+            type="text"
+            inputMode="numeric"
+            aria-label="Punkte Team A"
+            className={cn(
+              "w-12 h-12 font-display text-xl text-center rounded-lg border-2 transition-all focus-visible:ring-[3px] focus-visible:ring-brand-red/30 outline-hidden",
+              isValid ? "border-brand-teal bg-brand-teal/5 text-brand-teal" : "border-gray-200 focus-visible:border-brand-red"
+            )}
+            value={scoreA}
+            onChange={(e) => setScoreA(e.target.value.replace(/\D/g, ""))}
+          />
+          <span className="text-gray-300 font-display" aria-hidden="true">:</span>
+          <input
+            type="text"
+            inputMode="numeric"
+            aria-label="Punkte Team B"
+            className={cn(
+              "w-12 h-12 font-display text-xl text-center rounded-lg border-2 transition-all focus-visible:ring-[3px] focus-visible:ring-brand-red/30 outline-hidden",
+              isValid ? "border-brand-teal bg-brand-teal/5 text-brand-teal" : "border-gray-200 focus-visible:border-brand-red"
+            )}
+            value={scoreB}
+            onChange={(e) => setScoreB(e.target.value.replace(/\D/g, ""))}
+          />
+        </div>
+
+        <div className="text-left min-w-0">
+          <p className="text-xs font-bold text-brand-navy truncate">
+            {match.teamBNames.join(" & ")}
+          </p>
+        </div>
+      </div>
+
+      {isKnockout && isTie && (
+        <div className="bg-gray-50 p-3 rounded-xl space-y-2">
+          <p className="text-[10px] uppercase tracking-widest font-bold text-center text-gray-400">Gewinner bestimmen</p>
+          <div className="flex gap-2">
+            <Button
+              variant={winningSide === "A" ? "brand" : "outline"}
+              size="touch"
+              className="flex-1 truncate"
+              onClick={() => setWinningSide("A")}
+            >
+              {match.teamANames.join(" & ")}
+            </Button>
+            <Button
+              variant={winningSide === "B" ? "brand" : "outline"}
+              size="touch"
+              className="flex-1 truncate"
+              onClick={() => setWinningSide("B")}
+            >
+              {match.teamBNames.join(" & ")}
+            </Button>
+          </div>
+        </div>
       )}
+
+      <Button
+        variant={isValid ? "brandNavy" : "brandSubtle"}
+        size="touch"
+        className="w-full"
+        onClick={handleSave}
+        disabled={saving || !isValid}
+      >
+        {saving ? "Speichere..." : "Ergebnis überschreiben"}
+      </Button>
+
+      {error && <p className="text-[10px] font-bold text-red-600 uppercase text-center" role="alert">{error}</p>}
     </div>
   );
 }

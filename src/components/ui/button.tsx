@@ -1,11 +1,12 @@
 import * as React from "react"
-import { cva, type VariantProps } from "class-variance-authority"
+import { cva } from "class-variance-authority"
 import { Slot } from "radix-ui"
+import type {VariantProps} from "class-variance-authority";
 
 import { cn } from "~/lib/utils"
 
 const buttonVariants = cva(
-  "inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-all outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-all outline-hidden focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {
@@ -19,6 +20,20 @@ const buttonVariants = cva(
         ghost:
           "hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50",
         link: "text-primary underline-offset-4 hover:underline",
+        brand:
+          "bg-brand-red text-white hover:bg-brand-red/90 active:scale-[0.98] font-display uppercase tracking-[0.2em] motion-reduce:active:scale-100",
+        brandNavy:
+          "bg-brand-navy text-white hover:bg-brand-navy/90 active:scale-[0.98] motion-reduce:active:scale-100",
+        brandOutline:
+          "border-2 border-brand-navy text-brand-navy hover:bg-brand-navy hover:text-white active:scale-[0.98] motion-reduce:active:scale-100",
+        brandTeal:
+          "bg-brand-teal text-white hover:bg-brand-teal/90 active:scale-[0.98] motion-reduce:active:scale-100",
+        brandDestructive:
+          "bg-red-600 text-white hover:bg-red-700 active:scale-[0.98] motion-reduce:active:scale-100",
+        brandGhost:
+          "bg-white/20 hover:bg-white/30 text-white",
+        brandSubtle:
+          "bg-gray-100 text-gray-400",
       },
       size: {
         default: "h-9 px-4 py-2 has-[>svg]:px-3",
@@ -29,6 +44,9 @@ const buttonVariants = cva(
         "icon-xs": "size-6 rounded-md [&_svg:not([class*='size-'])]:size-3",
         "icon-sm": "size-8",
         "icon-lg": "size-10",
+        touch: "h-11 px-4 text-[10px] font-display uppercase tracking-widest rounded-md",
+        touchLg: "h-12 px-5 py-2.5 text-[10px] font-display uppercase tracking-widest rounded-md min-h-[44px]",
+        touchXl: "h-14 px-6 text-xs font-display uppercase tracking-[0.2em] rounded-md shadow-md",
       },
     },
     defaultVariants: {

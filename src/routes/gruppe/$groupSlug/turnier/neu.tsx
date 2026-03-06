@@ -1,17 +1,14 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useSuspenseQuery } from "@tanstack/react-query";
+import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useQuery, useSuspenseQuery } from "@tanstack/react-query";
 import { useMutation } from "convex/react";
 import { convexQuery } from "@convex-dev/react-query";
+import { useState } from "react";
 import { api } from "../../../../../convex/_generated/api";
-import { Button } from "~/components/ui/button";
+import { validateTournamentConfig } from "../../../../../convex/model/validation";
+import { resolveTournamentCreateAccess } from "../access";
+import type { Id } from "../../../../../convex/_generated/dataModel";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "~/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -19,30 +16,32 @@ import {
   SelectTrigger,
   SelectValue,
 } from "~/components/ui/select";
-import { useState } from "react";
-import type { Id } from "../../../../../convex/_generated/dataModel";
+import { Button } from "~/components/ui/button";
+import { cn } from "~/lib/utils";
 
 export const Route = createFileRoute("/gruppe/$groupSlug/turnier/neu")({
   component: CreateTournament,
 });
 
-function CreateTournament() {
+export function CreateTournament() {
   const { groupSlug } = Route.useParams();
   const navigate = useNavigate();
+  const { data: me } = useSuspenseQuery(convexQuery(api.users.me, {}));
 
   const { data: group } = useSuspenseQuery(
     convexQuery(api.groups.getBySlug, { slug: groupSlug })
   );
-  const { data: members } = useSuspenseQuery(
-    convexQuery(api.groups.getMembers, {
-      groupId: (group?._id ?? "") as any,
-    })
-  );
+  const { data: members = [], isLoading: membersLoading } = useQuery({
+    ...convexQuery(api.groups.getMembers, {
+      groupId: (group?._id ?? "missing") as any,
+    }),
+    enabled: !!group,
+  });
 
   const createTournament = useMutation(api.tournaments.create);
 
   const [name, setName] = useState("");
-  const [mode, setMode] = useState<"amerikaner" | "cup">("amerikaner");
+  const [mode, setMode] = useState<"americano" | "cup">("americano");
   const [courts, setCourts] = useState(1);
   const [selectedPlayers, setSelectedPlayers] = useState<Set<string>>(
     new Set()
@@ -51,7 +50,34 @@ function CreateTournament() {
   const [loading, setLoading] = useState(false);
 
   if (!group) {
-    return <div className="p-8 text-center">Gruppe nicht gefunden</div>;
+    return (
+      <div className="p-8 text-center animate-fade-in-up">
+        <h2 className="font-display uppercase text-brand-navy">Gruppe nicht gefunden</h2>
+      </div>
+    );
+  }
+
+  const access = resolveTournamentCreateAccess(me ?? null, members, membersLoading);
+  if (access === "loading") {
+    return <div className="mx-auto max-w-lg p-4 mt-12 text-center">Lade Berechtigungen...</div>;
+  }
+  if (access === "denied") {
+    return (
+      <div className="mx-auto max-w-md p-6 mt-8 text-center animate-fade-in-up bg-white rounded-xl border border-gray-100 shadow-sm">
+        <h2 className="font-display uppercase text-brand-navy mb-2">Keine Berechtigung</h2>
+        <p className="text-gray-500 text-sm mb-6 leading-relaxed">
+          Nur Gruppen-Admins dürfen neue Turniere planen und erstellen.
+        </p>
+        <Button variant="brandNavy" size="touchLg" asChild>
+          <Link
+            to="/gruppe/$groupSlug"
+            params={{ groupSlug }}
+          >
+            &larr; Zurück zur Gruppe
+          </Link>
+        </Button>
+      </div>
+    );
   }
 
   const togglePlayer = (memberId: string) => {
@@ -61,6 +87,13 @@ function CreateTournament() {
     setSelectedPlayers(next);
   };
 
+  const playerCountValid = validateTournamentConfig(
+    mode,
+    selectedPlayers.size,
+    courts
+  ).valid;
+  const trimmedName = name.trim();
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
@@ -68,10 +101,10 @@ function CreateTournament() {
     try {
       const tournamentId = await createTournament({
         groupId: group._id,
-        name,
+        name: trimmedName,
         mode,
         courts,
-        playerIds: Array.from(selectedPlayers) as Id<"groupMembers">[],
+        playerIds: Array.from(selectedPlayers) as Array<Id<"groupMembers">>,
       });
       navigate({
         to: "/gruppe/$groupSlug/turnier/$tournamentId",
@@ -85,49 +118,67 @@ function CreateTournament() {
   };
 
   return (
-    <div className="mx-auto max-w-md p-4 mt-8">
-      <Card>
-        <CardHeader>
-          <CardTitle>Neues Turnier</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">Turniername</Label>
-              <Input
-                id="name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="z.B. Sommer-Turnier 2026"
-                required
-              />
-            </div>
+    <div className="mx-auto max-w-lg p-4 space-y-8 animate-fade-in-up">
+      <div className="space-y-2">
+        <Link
+          to="/gruppe/$groupSlug"
+          params={{ groupSlug }}
+          className="text-[10px] uppercase tracking-[0.2em] font-bold text-gray-400 hover:text-brand-red transition-colors flex items-center gap-1.5"
+        >
+          <span className="text-lg leading-none" aria-hidden="true">&larr;</span> {groupSlug}
+        </Link>
+        <h2 className="font-display text-2xl sm:text-3xl uppercase text-brand-navy">
+          Neues Turnier
+        </h2>
+      </div>
 
+      <form onSubmit={handleSubmit} className="space-y-8 bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
+        <div className="space-y-6">
+          <div className="space-y-2">
+            <Label
+              htmlFor="name"
+              className="text-[10px] uppercase tracking-widest font-bold text-gray-400"
+            >
+              Turniername
+            </Label>
+            <Input
+              id="name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="z.B. Sommer-Turnier 2026"
+              required
+              className="h-12 border-gray-200 font-medium"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
             <div className="space-y-2">
-              <Label>Modus</Label>
+              <Label className="text-[10px] uppercase tracking-widest font-bold text-gray-400">
+                Modus
+              </Label>
               <Select
                 value={mode}
-                onValueChange={(v) => setMode(v as "amerikaner" | "cup")}
+                onValueChange={(v) => setMode(v as "americano" | "cup")}
               >
-                <SelectTrigger>
+                <SelectTrigger className="h-12 border-gray-200 font-medium">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="amerikaner">
-                    Americano (4-8 Spieler)
-                  </SelectItem>
+                  <SelectItem value="americano">Americano (4 oder 8 Spieler)</SelectItem>
                   <SelectItem value="cup">Cup (8 Spieler)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             <div className="space-y-2">
-              <Label>Plätze</Label>
+              <Label className="text-[10px] uppercase tracking-widest font-bold text-gray-400">
+                Plätze
+              </Label>
               <Select
                 value={String(courts)}
                 onValueChange={(v) => setCourts(Number(v))}
               >
-                <SelectTrigger>
+                <SelectTrigger className="h-12 border-gray-200 font-medium">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -136,36 +187,57 @@ function CreateTournament() {
                 </SelectContent>
               </Select>
             </div>
+          </div>
 
-            <div className="space-y-2">
-              <Label>
-                Spieler ({selectedPlayers.size} ausgewählt)
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <Label className="text-[10px] uppercase tracking-widest font-bold text-gray-400">
+                Spieler auswählen
               </Label>
-              <div className="grid grid-cols-2 gap-2">
-                {members.map((m) => (
-                  <Button
-                    key={m._id}
-                    type="button"
-                    variant={
-                      selectedPlayers.has(m._id) ? "default" : "outline"
-                    }
-                    size="sm"
-                    onClick={() => togglePlayer(m._id)}
-                  >
-                    {m.displayName}
-                  </Button>
-                ))}
-              </div>
+              <span className={cn(
+                "font-display text-xs",
+                playerCountValid ? "text-brand-teal" : "text-brand-red"
+              )}>
+                {selectedPlayers.size} / {mode === "cup" ? "8" : "4 oder 8"}
+              </span>
             </div>
+            
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {members.map((m) => (
+                <Button
+                  key={m._id}
+                  type="button"
+                  variant={selectedPlayers.has(m._id) ? "brand" : "outline"}
+                  size="touchLg"
+                  className={cn(
+                    "justify-center",
+                    selectedPlayers.has(m._id) && "shadow-md"
+                  )}
+                  onClick={() => togglePlayer(m._id)}
+                >
+                  {m.displayName}
+                </Button>
+              ))}
+            </div>
+          </div>
+        </div>
 
-            {error && <p className="text-sm text-red-600">{error}</p>}
+        {error && (
+          <div className="bg-red-50 border-l-2 border-red-500 p-3" role="alert">
+            <p className="text-[10px] font-bold text-red-700 uppercase tracking-wider">{error}</p>
+          </div>
+        )}
 
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? "Erstelle..." : "Turnier erstellen"}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+        <Button
+          type="submit"
+          variant={loading || !playerCountValid ? "brandSubtle" : "brand"}
+          size="touchXl"
+          className="w-full"
+          disabled={loading || !playerCountValid || !trimmedName}
+        >
+          {loading ? "Wird erstellt..." : "Turnier erstellen"}
+        </Button>
+      </form>
     </div>
   );
 }

@@ -10,7 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as DevIndexRouteImport } from './routes/dev/index'
+import { Route as InternalIndexRouteImport } from './routes/internal/index'
 import { Route as GruppeNeuRouteImport } from './routes/gruppe/neu'
 import { Route as GruppeGroupSlugIndexRouteImport } from './routes/gruppe/$groupSlug/index'
 import { Route as GruppeGroupSlugEinstellungenRouteImport } from './routes/gruppe/$groupSlug/einstellungen'
@@ -23,9 +23,9 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const DevIndexRoute = DevIndexRouteImport.update({
-  id: '/dev/',
-  path: '/dev/',
+const InternalIndexRoute = InternalIndexRouteImport.update({
+  id: '/internal/',
+  path: '/internal/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const GruppeNeuRoute = GruppeNeuRouteImport.update({
@@ -66,7 +66,7 @@ const GruppeGroupSlugTurnierTournamentIdAdminRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/gruppe/neu': typeof GruppeNeuRoute
-  '/dev/': typeof DevIndexRoute
+  '/internal/': typeof InternalIndexRoute
   '/gruppe/$groupSlug/einstellungen': typeof GruppeGroupSlugEinstellungenRoute
   '/gruppe/$groupSlug/': typeof GruppeGroupSlugIndexRoute
   '/gruppe/$groupSlug/turnier/neu': typeof GruppeGroupSlugTurnierNeuRoute
@@ -76,7 +76,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/gruppe/neu': typeof GruppeNeuRoute
-  '/dev': typeof DevIndexRoute
+  '/internal': typeof InternalIndexRoute
   '/gruppe/$groupSlug/einstellungen': typeof GruppeGroupSlugEinstellungenRoute
   '/gruppe/$groupSlug': typeof GruppeGroupSlugIndexRoute
   '/gruppe/$groupSlug/turnier/neu': typeof GruppeGroupSlugTurnierNeuRoute
@@ -87,7 +87,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/gruppe/neu': typeof GruppeNeuRoute
-  '/dev/': typeof DevIndexRoute
+  '/internal/': typeof InternalIndexRoute
   '/gruppe/$groupSlug/einstellungen': typeof GruppeGroupSlugEinstellungenRoute
   '/gruppe/$groupSlug/': typeof GruppeGroupSlugIndexRoute
   '/gruppe/$groupSlug/turnier/neu': typeof GruppeGroupSlugTurnierNeuRoute
@@ -99,7 +99,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/gruppe/neu'
-    | '/dev/'
+    | '/internal/'
     | '/gruppe/$groupSlug/einstellungen'
     | '/gruppe/$groupSlug/'
     | '/gruppe/$groupSlug/turnier/neu'
@@ -109,7 +109,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/gruppe/neu'
-    | '/dev'
+    | '/internal'
     | '/gruppe/$groupSlug/einstellungen'
     | '/gruppe/$groupSlug'
     | '/gruppe/$groupSlug/turnier/neu'
@@ -119,7 +119,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/gruppe/neu'
-    | '/dev/'
+    | '/internal/'
     | '/gruppe/$groupSlug/einstellungen'
     | '/gruppe/$groupSlug/'
     | '/gruppe/$groupSlug/turnier/neu'
@@ -130,7 +130,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   GruppeNeuRoute: typeof GruppeNeuRoute
-  DevIndexRoute: typeof DevIndexRoute
+  InternalIndexRoute: typeof InternalIndexRoute
   GruppeGroupSlugEinstellungenRoute: typeof GruppeGroupSlugEinstellungenRoute
   GruppeGroupSlugIndexRoute: typeof GruppeGroupSlugIndexRoute
   GruppeGroupSlugTurnierNeuRoute: typeof GruppeGroupSlugTurnierNeuRoute
@@ -147,11 +147,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/dev/': {
-      id: '/dev/'
-      path: '/dev'
-      fullPath: '/dev/'
-      preLoaderRoute: typeof DevIndexRouteImport
+    '/internal/': {
+      id: '/internal/'
+      path: '/internal'
+      fullPath: '/internal/'
+      preLoaderRoute: typeof InternalIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/gruppe/neu': {
@@ -202,7 +202,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   GruppeNeuRoute: GruppeNeuRoute,
-  DevIndexRoute: DevIndexRoute,
+  InternalIndexRoute: InternalIndexRoute,
   GruppeGroupSlugEinstellungenRoute: GruppeGroupSlugEinstellungenRoute,
   GruppeGroupSlugIndexRoute: GruppeGroupSlugIndexRoute,
   GruppeGroupSlugTurnierNeuRoute: GruppeGroupSlugTurnierNeuRoute,
