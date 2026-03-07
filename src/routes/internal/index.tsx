@@ -106,7 +106,7 @@ function InternalDashboard() {
 
       {actionError && (
         <div className="bg-red-50 border-l-2 border-red-500 p-3" role="alert">
-          <p className="text-[10px] font-bold text-red-700 uppercase tracking-wider">{actionError}</p>
+          <p className="text-[10px] font-bold text-red-700 uppercase tracking-widest">{actionError}</p>
         </div>
       )}
 

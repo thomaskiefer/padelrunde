@@ -48,7 +48,7 @@ function GroupDashboard() {
   const canManage = canManageGroup(me ?? null, members);
 
   return (
-    <div className="mx-auto max-w-5xl p-4 space-y-6 animate-fade-in-up">
+    <div className="mx-auto max-w-5xl p-4 space-y-8 animate-fade-in-up">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <h2 className="font-display text-xl sm:text-2xl md:text-3xl uppercase text-brand-navy truncate">
@@ -98,7 +98,6 @@ function GroupMembers({
   return (
     <section className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
       <p className="uppercase tracking-widest text-[10px] font-bold text-gray-400 mb-3 flex items-center gap-2">
-        <span className="w-4 h-px bg-gray-200" aria-hidden="true" />
         Mitglieder <span className="font-display text-brand-navy text-sm">{members.length}</span>
       </p>
       <div className="flex flex-wrap gap-2">
@@ -111,9 +110,7 @@ function GroupMembers({
           >
             {m.displayName}
             {m.role === "admin" && (
-              <Badge variant="brandRed" size="xs">
-                Admin
-              </Badge>
+              <span className="ml-1 opacity-70">Admin</span>
             )}
           </Badge>
         ))}
@@ -142,7 +139,7 @@ function TournamentList({
           </svg>
         </div>
         <p className="font-display text-sm uppercase tracking-widest text-gray-400">Noch keine Turniere</p>
-        <p className="text-[11px] text-gray-400 mt-2">Starte jetzt dein erstes Americano oder Cup Turnier.</p>
+        <p className="text-[11px] text-gray-400 mt-2">Starte jetzt dein erstes Americano- oder Padel-Cup-Turnier.</p>
       </div>
     );
   }
@@ -189,7 +186,7 @@ function TournamentList({
               </div>
 
               <div className="flex items-center justify-between mt-auto pt-4 border-t border-gray-50">
-                <div className="flex items-center gap-4 text-[10px] uppercase tracking-wider font-bold text-gray-400">
+                <div className="flex items-center gap-4 text-[10px] uppercase tracking-widest font-bold text-gray-400">
                   <span className="group-hover:text-brand-navy transition-colors">
                     {t.playerIds.length} Spieler
                   </span>

@@ -51,7 +51,7 @@ export function CreateTournament() {
 
   if (!group) {
     return (
-      <div className="p-8 text-center animate-fade-in-up">
+      <div className="mx-auto max-w-lg p-8 text-center animate-fade-in-up">
         <h2 className="font-display uppercase text-brand-navy">Gruppe nicht gefunden</h2>
       </div>
     );
@@ -151,7 +151,7 @@ export function CreateTournament() {
             />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-[1fr_8rem] gap-6">
             <div className="space-y-2">
               <Label className="text-[10px] uppercase tracking-widest font-bold text-gray-400">
                 Modus
@@ -160,14 +160,19 @@ export function CreateTournament() {
                 value={mode}
                 onValueChange={(v) => setMode(v as "americano" | "cup")}
               >
-                <SelectTrigger className="h-12 border-gray-200 font-medium">
+                <SelectTrigger className="w-full h-12 border-gray-200 font-medium">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="americano">Americano (4 oder 8 Spieler)</SelectItem>
-                  <SelectItem value="cup">Cup (8 Spieler)</SelectItem>
+                  <SelectItem value="cup">Padel Cup (8 Spieler)</SelectItem>
                 </SelectContent>
               </Select>
+              <p className="text-[10px] text-gray-400 leading-relaxed">
+                {mode === "cup"
+                  ? "5 Vorrunden, danach Halbfinale, Finale und Spiel um Platz 3."
+                  : "Jeder spielt mit wechselnden Partnern, 32 Punkte pro Spiel."}
+              </p>
             </div>
 
             <div className="space-y-2">
@@ -178,7 +183,7 @@ export function CreateTournament() {
                 value={String(courts)}
                 onValueChange={(v) => setCourts(Number(v))}
               >
-                <SelectTrigger className="h-12 border-gray-200 font-medium">
+                <SelectTrigger className="w-full h-12 border-gray-200 font-medium">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -224,7 +229,7 @@ export function CreateTournament() {
 
         {error && (
           <div className="bg-red-50 border-l-2 border-red-500 p-3" role="alert">
-            <p className="text-[10px] font-bold text-red-700 uppercase tracking-wider">{error}</p>
+            <p className="text-[10px] font-bold text-red-700 uppercase tracking-widest">{error}</p>
           </div>
         )}
 

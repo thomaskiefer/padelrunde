@@ -24,7 +24,7 @@ function Hero() {
   return (
     <div className="mt-8 flex flex-col items-center text-center sm:mt-16 md:mt-20 px-2">
       <h2
-        className="animate-fade-in-up font-display text-2xl uppercase leading-tight tracking-wide text-brand-navy sm:text-4xl md:text-5xl lg:text-6xl"
+        className="animate-fade-in-up font-display text-2xl uppercase leading-tight tracking-widest text-brand-navy sm:text-4xl md:text-5xl lg:text-6xl"
       >
         Organisiere dein
         <br className="hidden sm:inline" />
@@ -34,7 +34,7 @@ function Hero() {
         className="animate-fade-in-up mt-4 sm:mt-5 max-w-lg text-base sm:text-lg text-gray-500"
         style={{ animationDelay: "0.1s" }}
       >
-        Americano oder Cup — stell dein Turnier zusammen und leg los.
+        Americano oder Padel Cup — stell dein Turnier zusammen und leg los.
         Gruppen erstellen, Spieler einladen, Ergebnisse live verfolgen.
       </p>
       <SignInButton mode="modal">
@@ -72,7 +72,7 @@ function GroupList() {
     <div className="space-y-6">
       {/* Section header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h2 className="font-display text-xl sm:text-2xl uppercase tracking-wide text-brand-navy">
+        <h2 className="font-display text-xl sm:text-2xl uppercase tracking-widest text-brand-navy">
           Meine Gruppen
         </h2>
         <div className="flex flex-wrap gap-2">
@@ -117,7 +117,7 @@ function GroupList() {
                 key={group._id}
                 to="/gruppe/$groupSlug"
                 params={{ groupSlug: group.slug }}
-                className="animate-fade-in-up group bg-white rounded-xl border border-gray-100 p-5 transition-all duration-300 hover:border-brand-red/30 hover:shadow-xl hover:-translate-y-1 active:scale-[0.98] block relative overflow-hidden motion-reduce:translate-y-0 motion-reduce:scale-100 motion-reduce:transition-none focus-visible:ring-[3px] focus-visible:ring-brand-navy/50 focus-visible:outline-hidden"
+                className="animate-fade-in-up group bg-white rounded-xl border border-gray-100 shadow-sm p-5 transition-all duration-300 hover:border-brand-red/30 hover:shadow-xl hover:-translate-y-1 active:scale-[0.98] block relative overflow-hidden motion-reduce:translate-y-0 motion-reduce:scale-100 motion-reduce:transition-none focus-visible:ring-[3px] focus-visible:ring-brand-navy/50 focus-visible:outline-hidden"
                 style={{ animationDelay: `${Math.min(i * 0.05, 0.3)}s` }}
               >
                 {/* Slanted Accent Corner */}

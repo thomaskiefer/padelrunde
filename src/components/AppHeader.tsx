@@ -83,6 +83,7 @@ function UserMenu() {
   return (
     <div className="relative" ref={ref}>
       <button
+        type="button"
         onClick={() => setOpen(!open)}
         aria-label="Benutzermenü"
         aria-expanded={open}
@@ -115,7 +116,7 @@ function UserMenu() {
               setOpen(false);
               openUserProfile();
             }}
-            className="w-full text-left justify-start px-3 py-2 text-sm text-gray-700 rounded-none focus-visible:ring-brand-navy/50 min-h-[44px]"
+            className="w-full text-left justify-start px-3 py-2 text-sm text-gray-700 rounded-none hover:bg-gray-50 focus-visible:ring-brand-navy/50 min-h-[44px]"
           >
             Profil bearbeiten
           </Button>
@@ -124,7 +125,7 @@ function UserMenu() {
             role="menuitem"
             tabIndex={-1}
             onClick={() => signOut()}
-            className="w-full text-left justify-start px-3 py-2 text-sm text-brand-red rounded-none focus-visible:ring-brand-navy/50 min-h-[44px]"
+            className="w-full text-left justify-start px-3 py-2 text-sm text-brand-red rounded-none hover:bg-gray-50 focus-visible:ring-brand-navy/50 min-h-[44px]"
           >
             Abmelden
           </Button>

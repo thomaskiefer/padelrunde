@@ -137,7 +137,7 @@ export function TournamentAdmin() {
   };
 
   return (
-    <div className="mx-auto max-w-5xl p-4 space-y-6 animate-fade-in-up">
+    <div className="mx-auto max-w-5xl p-4 space-y-8 animate-fade-in-up">
       <div>
         <Link
           to="/gruppe/$groupSlug/turnier/$tournamentId"
@@ -147,7 +147,7 @@ export function TournamentAdmin() {
           <span className="text-lg leading-none" aria-hidden="true">&larr;</span> Zurück zum Turnier
         </Link>
         <p className="text-[10px] uppercase tracking-widest font-bold text-gray-400 mt-2">Verwaltung</p>
-        <h2 className="text-xl sm:text-2xl font-display uppercase text-brand-navy truncate">
+        <h2 className="text-2xl sm:text-3xl font-display uppercase text-brand-navy truncate">
           {tournament.name}
         </h2>
       </div>
@@ -225,7 +225,7 @@ export function TournamentAdmin() {
             </div>
           )}
         </div>
-        {actionError && <p className="mt-3 text-sm text-red-200" role="alert">{actionError}</p>}
+        {actionError && <p className="mt-3 text-[10px] font-bold uppercase tracking-widest text-red-200" role="alert">{actionError}</p>}
       </div>
 
       <div className="space-y-6">
@@ -262,10 +262,10 @@ function AdminRoundSection({
   const title = isKnockout ? label : `${label} ${roundNumber}`;
 
   return (
-    <div className="border-b border-gray-200 pb-6">
+    <div className="border-b border-gray-100 pb-6">
       <h3
         className={cn(
-          "section-title-accent font-display text-sm uppercase tracking-widest mb-4",
+          "font-display text-sm uppercase tracking-widest mb-4",
           isKnockout ? "text-brand-red" : "text-brand-navy"
         )}
       >
@@ -429,7 +429,7 @@ function AdminMatchRow({
 
       {error && (
         <div className="bg-red-50 border-l-2 border-red-500 p-3" role="alert">
-          <p className="text-[10px] font-bold text-red-700 uppercase tracking-wider">{error}</p>
+          <p className="text-[10px] font-bold text-red-700 uppercase tracking-widest">{error}</p>
         </div>
       )}
     </div>

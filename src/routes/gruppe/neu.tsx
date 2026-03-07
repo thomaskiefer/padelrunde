@@ -134,7 +134,7 @@ function CreateGroup() {
 
           {error && (
             <div className="bg-red-50 border-l-2 border-red-500 p-3" role="alert">
-              <p className="text-[10px] font-bold text-red-700 uppercase tracking-wider">{error}</p>
+              <p className="text-[10px] font-bold text-red-700 uppercase tracking-widest">{error}</p>
             </div>
           )}
 
@@ -155,7 +155,7 @@ function CreateGroup() {
         <ul className="space-y-2">
           {[
             "Mitglieder einladen über dein URL-Kürzel",
-            "Erstes Americano- oder Cup-Turnier planen",
+            "Erstes Americano- oder Padel-Cup-Turnier planen",
             "Ergebnisse live erfassen und Rangliste führen"
           ].map((item, i) => (
             <li key={i} className="flex items-start gap-2 text-xs text-brand-navy/60 font-medium">
