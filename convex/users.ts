@@ -8,12 +8,22 @@ import { requireSuperAdmin } from "./helpers";
 import { collectHistoricalMemberIds } from "./model/history";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 
-function isSuperAdminClerkId(clerkId: string) {
+function isBootstrapSuperAdminClerkId(clerkId: string) {
   return (process.env.SUPERADMIN_CLERK_IDS ?? "")
     .split(",")
     .map((value) => value.trim())
     .filter(Boolean)
     .includes(clerkId);
+}
+
+function resolveStoredSuperAdminState({
+  clerkId,
+  existingIsSuperAdmin,
+}: {
+  clerkId: string;
+  existingIsSuperAdmin?: boolean;
+}) {
+  return Boolean(existingIsSuperAdmin) || isBootstrapSuperAdminClerkId(clerkId);
 }
 
 export async function getCurrentUser(ctx: QueryCtx) {
@@ -61,12 +71,14 @@ async function ensureUserFromIdentity(ctx: MutationCtx) {
     .query("users")
     .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
     .unique();
-  const isSuperAdmin = isSuperAdminClerkId(identity.subject);
   const identityData = {
     name: resolveIdentityName(identity),
     email: identity.email ?? existing?.email ?? "",
     avatarUrl: identity.pictureUrl ?? existing?.avatarUrl,
-    isSuperAdmin,
+    isSuperAdmin: resolveStoredSuperAdminState({
+      clerkId: identity.subject,
+      existingIsSuperAdmin: existing?.isSuperAdmin,
+    }),
   };
 
   if (existing) {
@@ -105,7 +117,11 @@ export const listAll = query({
   handler: async (ctx) => {
     const user = await getCurrentUser(ctx);
     if (!user?.isSuperAdmin) return [];
-    return ctx.db.query("users").collect();
+    const users = await ctx.db.query("users").collect();
+    return users.map((candidate) => ({
+      ...candidate,
+      isBootstrapSuperAdmin: isBootstrapSuperAdminClerkId(candidate.clerkId),
+    }));
   },
 });
 
@@ -118,6 +134,34 @@ export const toggleCanCreateGroup = mutation({
       throw new ConvexError("Benutzer nicht gefunden");
     }
     await ctx.db.patch("users", userId, { canCreateGroup });
+  },
+});
+
+export const setSuperAdmin = mutation({
+  args: { userId: v.id("users"), isSuperAdmin: v.boolean() },
+  handler: async (ctx, { userId, isSuperAdmin }) => {
+    await requireSuperAdmin(ctx);
+    const targetUser = await ctx.db.get("users", userId);
+    if (!targetUser) {
+      throw new ConvexError("Benutzer nicht gefunden");
+    }
+
+    if (!isSuperAdmin && isBootstrapSuperAdminClerkId(targetUser.clerkId)) {
+      throw new ConvexError(
+        "Bootstrap-Super-Admins müssen über SUPERADMIN_CLERK_IDS verwaltet werden"
+      );
+    }
+
+    if (targetUser.isSuperAdmin && !isSuperAdmin) {
+      const superAdmins = (await ctx.db.query("users").collect()).filter(
+        (user) => user.isSuperAdmin && user._id !== userId
+      );
+      if (superAdmins.length === 0) {
+        throw new ConvexError("Mindestens ein Super-Admin muss bleiben");
+      }
+    }
+
+    await ctx.db.patch("users", userId, { isSuperAdmin });
   },
 });
 
@@ -136,14 +180,15 @@ export const upsertFromClerk = internalMutation({
       .withIndex("by_clerk_id", (q) => q.eq("clerkId", data.id))
       .unique();
 
-    const isSuperAdmin = isSuperAdminClerkId(data.id);
-
     if (existing) {
       await ctx.db.patch("users", existing._id, {
         name: data.name,
         email: data.email,
         avatarUrl: data.imageUrl,
-        isSuperAdmin,
+        isSuperAdmin: resolveStoredSuperAdminState({
+          clerkId: data.id,
+          existingIsSuperAdmin: existing.isSuperAdmin,
+        }),
         canCreateGroup: existing.canCreateGroup,
       });
     } else {
@@ -152,7 +197,7 @@ export const upsertFromClerk = internalMutation({
         name: data.name,
         email: data.email,
         avatarUrl: data.imageUrl,
-        isSuperAdmin,
+        isSuperAdmin: resolveStoredSuperAdminState({ clerkId: data.id }),
         canCreateGroup: false,
         hasCreatedGroup: false,
       });

@@ -1,15 +1,15 @@
 import { describe, expect, test } from "bun:test";
-import { generateAmericanoPairings } from "./pairings";
-import { determineWinningSide, validateKnockoutScore, validateScore, validateTournamentConfig } from "./validation";
-import { computeStandings } from "./standings";
-import { generateKnockoutSeeding, resolveKnockoutAdvancement  } from "./knockout";
+import { generateAmericanoPairings } from "../../../convex/model/pairings";
+import { determineWinningSide, validateKnockoutScore, validateScore, validateTournamentConfig } from "../../../convex/model/validation";
+import { computeStandings } from "../../../convex/model/standings";
+import { generateKnockoutSeeding, resolveKnockoutAdvancement  } from "../../../convex/model/knockout";
 
 // ─── Knockout Advancement ───────────────────────────────
 
 
 // ─── Partner/Opponent Statistics ────────────────────────
 
-import { computePartnerOpponentStats } from "./stats";
+import { computePartnerOpponentStats } from "../../../convex/model/stats";
 
 // ─── Helpers ─────────────────────────────────────────────
 

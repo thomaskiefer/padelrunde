@@ -1,9 +1,9 @@
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "bun:test";
 import { convexTest } from "convex-test";
-import { api, internal } from "../_generated/api";
-import schema from "../schema";
-import type { Doc } from "../_generated/dataModel";
+import { api, internal } from "../../../convex/_generated/api";
+import schema from "../../../convex/schema";
+import type { Doc } from "../../../convex/_generated/dataModel";
 import type { TestConvex } from "convex-test";
 
 function resolveModulePath(relativePath: string) {
@@ -11,17 +11,26 @@ function resolveModulePath(relativePath: string) {
 }
 
 const convexModules = {
-  [resolveModulePath("../_generated/api.js")]: () => import("../_generated/api.js"),
-  [resolveModulePath("../_generated/server.js")]: () =>
-    import("../_generated/server.js"),
-  [resolveModulePath("../groups.ts")]: () => import("../groups.ts"),
-  [resolveModulePath("../helpers.ts")]: () => import("../helpers.ts"),
-  [resolveModulePath("../matches.ts")]: () => import("../matches.ts"),
-  [resolveModulePath("../rounds.ts")]: () => import("../rounds.ts"),
-  [resolveModulePath("../standings.ts")]: () => import("../standings.ts"),
-  [resolveModulePath("../stats.ts")]: () => import("../stats.ts"),
-  [resolveModulePath("../tournaments.ts")]: () => import("../tournaments.ts"),
-  [resolveModulePath("../users.ts")]: () => import("../users.ts"),
+  [resolveModulePath("../../../convex/_generated/api.js")]: () =>
+    import("../../../convex/_generated/api.js"),
+  [resolveModulePath("../../../convex/_generated/server.js")]: () =>
+    import("../../../convex/_generated/server.js"),
+  [resolveModulePath("../../../convex/groups.ts")]: () =>
+    import("../../../convex/groups.ts"),
+  [resolveModulePath("../../../convex/helpers.ts")]: () =>
+    import("../../../convex/helpers.ts"),
+  [resolveModulePath("../../../convex/matches.ts")]: () =>
+    import("../../../convex/matches.ts"),
+  [resolveModulePath("../../../convex/rounds.ts")]: () =>
+    import("../../../convex/rounds.ts"),
+  [resolveModulePath("../../../convex/standings.ts")]: () =>
+    import("../../../convex/standings.ts"),
+  [resolveModulePath("../../../convex/stats.ts")]: () =>
+    import("../../../convex/stats.ts"),
+  [resolveModulePath("../../../convex/tournaments.ts")]: () =>
+    import("../../../convex/tournaments.ts"),
+  [resolveModulePath("../../../convex/users.ts")]: () =>
+    import("../../../convex/users.ts"),
 };
 
 function createTestClient() {
@@ -46,7 +55,7 @@ async function findUserByClerkId(t: ConvexClient, clerkId: string) {
 async function upsertUser(
   t: ConvexClient,
   clerkId: string,
-  options: { canCreateGroup?: boolean } = {}
+  options: { canCreateGroup?: boolean; isSuperAdmin?: boolean } = {}
 ) {
   await t.mutation(internal.users.upsertFromClerk, {
     data: {
@@ -59,10 +68,18 @@ async function upsertUser(
   const user = await findUserByClerkId(t, clerkId);
   if (!user) throw new Error(`User ${clerkId} was not inserted`);
 
-  if (options.canCreateGroup !== undefined) {
+  if (
+    options.canCreateGroup !== undefined ||
+    options.isSuperAdmin !== undefined
+  ) {
     await t.run((ctx) =>
       ctx.db.patch("users", user._id, {
-        canCreateGroup: options.canCreateGroup,
+        ...(options.canCreateGroup !== undefined
+          ? { canCreateGroup: options.canCreateGroup }
+          : {}),
+        ...(options.isSuperAdmin !== undefined
+          ? { isSuperAdmin: options.isSuperAdmin }
+          : {}),
       })
     );
   }
@@ -117,6 +134,80 @@ describe("convex integration flows", () => {
         slug: "super-admin-group",
       });
       expect(groupId).toBeDefined();
+    } finally {
+      process.env.SUPERADMIN_CLERK_IDS = previousSuperAdminIds;
+    }
+  });
+
+  it("persists backoffice-promoted super admins across Clerk syncs", async () => {
+    const t = createTestClient();
+    await upsertUser(t, "actor", { isSuperAdmin: true });
+    const promoted = await upsertUser(t, "promoted-user");
+    const actorCtx = t.withIdentity({ subject: "actor" });
+
+    await actorCtx.mutation(api.users.setSuperAdmin, {
+      userId: promoted._id,
+      isSuperAdmin: true,
+    });
+
+    await t.mutation(internal.users.upsertFromClerk, {
+      data: {
+        id: "promoted-user",
+        name: "Promoted User Updated",
+        email: "promoted-user-updated@example.com",
+      },
+    });
+
+    const stored = await findUserByClerkId(t, "promoted-user");
+    expect(stored?.isSuperAdmin).toBe(true);
+
+    const promotedCtx = t.withIdentity({
+      subject: "promoted-user",
+      name: "Promoted User Updated",
+      email: "promoted-user-updated@example.com",
+    });
+    const ensured = await promotedCtx.mutation(api.users.ensureCurrentUser, {});
+    expect(ensured?.isSuperAdmin).toBe(true);
+  });
+
+  it("prevents removing the last stored super admin", async () => {
+    const t = createTestClient();
+    const onlyAdmin = await upsertUser(t, "only-admin", { isSuperAdmin: true });
+    const onlyAdminCtx = t.withIdentity({ subject: "only-admin" });
+
+    await expect(
+      onlyAdminCtx.mutation(api.users.setSuperAdmin, {
+        userId: onlyAdmin._id,
+        isSuperAdmin: false,
+      })
+    ).rejects.toThrow("Mindestens ein Super-Admin muss bleiben");
+  });
+
+  it("blocks backoffice demotion of bootstrap super admins", async () => {
+    const t = createTestClient();
+    const previousSuperAdminIds = process.env.SUPERADMIN_CLERK_IDS;
+    process.env.SUPERADMIN_CLERK_IDS = "bootstrap-admin";
+
+    try {
+      await upsertUser(t, "actor", { isSuperAdmin: true });
+      const target = await upsertUser(t, "bootstrap-admin");
+
+      const bootstrapCtx = t.withIdentity({
+        subject: "bootstrap-admin",
+        name: "Bootstrap Admin",
+        email: "bootstrap-admin@example.com",
+      });
+      await bootstrapCtx.mutation(api.users.ensureCurrentUser, {});
+
+      const actorCtx = t.withIdentity({ subject: "actor" });
+      await expect(
+        actorCtx.mutation(api.users.setSuperAdmin, {
+          userId: target._id,
+          isSuperAdmin: false,
+        })
+      ).rejects.toThrow(
+        "Bootstrap-Super-Admins müssen über SUPERADMIN_CLERK_IDS verwaltet werden"
+      );
     } finally {
       process.env.SUPERADMIN_CLERK_IDS = previousSuperAdminIds;
     }

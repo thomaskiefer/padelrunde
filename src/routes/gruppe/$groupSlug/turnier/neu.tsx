@@ -5,7 +5,7 @@ import { convexQuery } from "@convex-dev/react-query";
 import { useState } from "react";
 import { api } from "../../../../../convex/_generated/api";
 import { validateTournamentConfig } from "../../../../../convex/model/validation";
-import { resolveTournamentCreateAccess } from "../access";
+import { resolveTournamentCreateAccess } from "../-access";
 import type { Id } from "../../../../../convex/_generated/dataModel";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";

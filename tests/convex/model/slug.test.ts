@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { isValidSlugLength, normalizeSlug } from "./slug";
+import { isValidSlugLength, normalizeSlug } from "../../../convex/model/slug";
 
 describe("normalizeSlug", () => {
   it("normalizes mixed case and spacing", () => {

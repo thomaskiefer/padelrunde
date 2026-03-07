@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { validateAddMemberState, validateRoleChangeState } from "./groupMembership";
+import { validateAddMemberState, validateRoleChangeState } from "../../../convex/model/groupMembership";
 
 describe("validateAddMemberState", () => {
   it("rejects missing user", () => {

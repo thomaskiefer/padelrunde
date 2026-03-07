@@ -3,8 +3,8 @@ import {
   resolveSettingsAccess,
   resolveTournamentAdminAccess,
   resolveTournamentCreateAccess,
-} from "./access";
-import type { GroupAdminAccessState } from "./access";
+} from "./-access";
+import type { GroupAdminAccessState } from "./-access";
 
 const adminMember = [{ userId: "u1", role: "admin" as const }];
 const plainMember = [{ userId: "u1", role: "member" as const }];

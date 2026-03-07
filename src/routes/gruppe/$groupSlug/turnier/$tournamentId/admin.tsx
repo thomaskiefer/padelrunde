@@ -4,7 +4,7 @@ import { useMutation } from "convex/react";
 import { convexQuery } from "@convex-dev/react-query";
 import { useEffect, useState } from "react";
 import { api } from "../../../../../../convex/_generated/api";
-import { resolveTournamentAdminAccess } from "../../access";
+import { resolveTournamentAdminAccess } from "../../-access";
 import type { Id } from "../../../../../../convex/_generated/dataModel";
 import { Button } from "~/components/ui/button";
 import { cn } from "~/lib/utils";

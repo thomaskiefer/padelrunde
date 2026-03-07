@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { collectHistoricalMemberIds } from "./history";
+import { collectHistoricalMemberIds } from "../../../convex/model/history";
 
 describe("collectHistoricalMemberIds", () => {
   it("collects ids from tournament players and match teams", () => {

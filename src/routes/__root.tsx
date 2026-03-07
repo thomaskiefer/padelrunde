@@ -18,6 +18,7 @@ import type { ConvexQueryClient } from "@convex-dev/react-query";
 import type { QueryClient } from "@tanstack/react-query";
 import appCss from "~/styles/app.css?url";
 import { AppHeader } from "~/components/AppHeader";
+import { shouldEnsureCurrentUser } from "~/lib/currentUserSync";
 
 const fetchClerkAuth = createServerFn({ method: "GET" }).handler(async () => {
   const authState = await auth();
@@ -49,10 +50,7 @@ export const Route = createRootRouteWithContext<{
     const serverHttpClient = ctx.context.convexQueryClient.serverHttpClient;
     if (token && serverHttpClient) {
       serverHttpClient.setAuth(token);
-      const currentUser = await serverHttpClient.query(api.users.me, {});
-      if (!currentUser) {
-        await serverHttpClient.mutation(api.users.ensureCurrentUser, {});
-      }
+      await serverHttpClient.mutation(api.users.ensureCurrentUser, {});
     }
   },
   component: RootComponent,
@@ -78,30 +76,36 @@ function EnsureCurrentUserInBackground() {
   const { isLoaded, isSignedIn, userId } = useAuth();
   const { isLoading: convexAuthLoading, isAuthenticated } = useConvexAuth();
   const queryClient = useQueryClient();
-  const { data: me, isLoading: meLoading } = useQuery({
+  const { isLoading: meLoading } = useQuery({
     ...convexQuery(api.users.me, {}),
     enabled: isLoaded && isSignedIn && isAuthenticated,
   });
   const ensureCurrentUser = useMutation(api.users.ensureCurrentUser);
-  const attemptedUserIdRef = React.useRef<string | null>(null);
+  const ensuredUserIdRef = React.useRef<string | null>(null);
 
   React.useEffect(() => {
     if (!isSignedIn || !userId) {
-      attemptedUserIdRef.current = null;
-      return;
+      ensuredUserIdRef.current = null;
     }
-    if (me) {
-      attemptedUserIdRef.current = userId;
-    }
-  }, [isSignedIn, me, userId]);
+  }, [isSignedIn, userId]);
 
   React.useEffect(() => {
-    if (!isLoaded || !isSignedIn || !userId) return;
-    if (convexAuthLoading || !isAuthenticated || meLoading) return;
-    if (me || attemptedUserIdRef.current === userId) return;
+    if (
+      !shouldEnsureCurrentUser({
+        isClerkLoaded: isLoaded,
+        isSignedIn,
+        userId: userId ?? null,
+        isConvexAuthLoading: convexAuthLoading,
+        isConvexAuthenticated: isAuthenticated,
+        isMeLoading: meLoading,
+        ensuredUserId: ensuredUserIdRef.current,
+      })
+    ) {
+      return;
+    }
 
     let cancelled = false;
-    attemptedUserIdRef.current = userId;
+    ensuredUserIdRef.current = userId ?? null;
 
     void ensureCurrentUser({})
       .then(async () => {
@@ -110,7 +114,7 @@ function EnsureCurrentUserInBackground() {
       })
       .catch((error: unknown) => {
         if (cancelled) return;
-        attemptedUserIdRef.current = null;
+        ensuredUserIdRef.current = null;
         console.error("Failed to provision current user", error);
       });
 
@@ -123,7 +127,6 @@ function EnsureCurrentUserInBackground() {
     isAuthenticated,
     isLoaded,
     isSignedIn,
-    me,
     meLoading,
     queryClient,
     userId,

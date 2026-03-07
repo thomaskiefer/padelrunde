@@ -4,7 +4,7 @@ import { useMutation } from "convex/react";
 import { convexQuery } from "@convex-dev/react-query";
 import { useEffect, useState } from "react";
 import { api } from "../../../../convex/_generated/api";
-import { resolveSettingsAccess } from "./access";
+import { resolveSettingsAccess } from "./-access";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
@@ -17,6 +17,7 @@ import {
   SelectValue,
 } from "~/components/ui/select";
 import { canDemoteAdmin } from "~/lib/groupPermissions";
+import { cn } from "~/lib/utils";
 
 export const Route = createFileRoute("/gruppe/$groupSlug/einstellungen")({
   component: GroupSettings,
@@ -84,11 +85,11 @@ export function GroupSettings() {
   }
 
   if (access === "loading") {
-    return <div className="mx-auto max-w-4xl p-4 mt-12 text-center">Lade Berechtigungen...</div>;
+    return <div className="mx-auto max-w-5xl p-4 mt-12 text-center">Lade Berechtigungen...</div>;
   }
   if (access === "denied") {
     return (
-      <div className="mx-auto max-w-4xl p-4 mt-12 text-center animate-fade-in-up">
+      <div className="mx-auto max-w-5xl p-4 mt-12 text-center animate-fade-in-up">
         <h2 className="font-display text-xl uppercase text-brand-navy mb-2">Keine Berechtigung</h2>
         <p className="text-gray-500 text-sm mb-4">
           Nur Gruppen-Admins dürfen diese Seite öffnen.
@@ -153,7 +154,7 @@ export function GroupSettings() {
   };
 
   return (
-    <div className="mx-auto max-w-4xl p-4 space-y-6 animate-fade-in-up">
+    <div className="mx-auto max-w-5xl p-4 space-y-6 animate-fade-in-up">
       <div>
         <Link
           to="/gruppe/$groupSlug"
@@ -168,19 +169,20 @@ export function GroupSettings() {
       </div>
 
       <section>
-        <h3 className="section-title-accent font-display uppercase tracking-wide text-base sm:text-lg text-brand-navy mb-1">
+        <h3 className="section-title-accent font-display text-sm uppercase tracking-widest text-brand-navy mb-1">
           Mitglied hinzufügen
         </h3>
         <div className="w-full h-px bg-brand-red/20 mb-4" aria-hidden="true" />
         <form
           onSubmit={handleAddMember}
-          className="rounded-xl border border-gray-200 bg-white p-4 sm:p-5 space-y-4"
+          className="relative overflow-hidden rounded-xl border border-gray-100 bg-white p-4 sm:p-5 shadow-sm space-y-4"
         >
+          <div className="absolute top-0 right-0 w-16 h-16 -mr-8 -mt-8 rotate-45 bg-brand-navy/5" aria-hidden="true" />
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="member-user">Benutzer</Label>
+              <Label htmlFor="member-user" className="text-[10px] uppercase tracking-widest font-bold text-gray-400">Benutzer</Label>
               <Select value={selectedUserId} onValueChange={setSelectedUserId}>
-                <SelectTrigger id="member-user" className="w-full">
+                <SelectTrigger id="member-user" className="w-full h-12">
                   <SelectValue placeholder="Benutzer auswählen" />
                 </SelectTrigger>
                 <SelectContent>
@@ -194,12 +196,12 @@ export function GroupSettings() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="member-role">Rolle</Label>
+              <Label htmlFor="member-role" className="text-[10px] uppercase tracking-widest font-bold text-gray-400">Rolle</Label>
               <Select
                 value={newMemberRole}
                 onValueChange={(value: "admin" | "member") => setNewMemberRole(value)}
               >
-                <SelectTrigger id="member-role" className="w-full">
+                <SelectTrigger id="member-role" className="w-full h-12">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -211,19 +213,22 @@ export function GroupSettings() {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="display-name">Anzeigename</Label>
+            <Label htmlFor="display-name" className="text-[10px] uppercase tracking-widest font-bold text-gray-400">Anzeigename</Label>
             <Input
               id="display-name"
               value={displayName}
               onChange={(event) => setDisplayName(event.target.value)}
               placeholder="Name in der Gruppe"
+              className="h-12"
             />
           </div>
 
           {addError && (
-            <p className="text-sm text-red-600" role="alert">
-              {addError}
-            </p>
+            <div className="bg-red-50 border-l-2 border-red-500 p-3" role="alert">
+              <p className="text-[10px] font-bold text-red-700 uppercase tracking-wider">
+                {addError}
+              </p>
+            </div>
           )}
 
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -247,37 +252,43 @@ export function GroupSettings() {
       </section>
 
       <section>
-        <h3 className="section-title-accent font-display uppercase tracking-wide text-base sm:text-lg text-brand-navy mb-1">
+        <h3 className="section-title-accent font-display text-sm uppercase tracking-widest text-brand-navy mb-1">
           Mitglieder verwalten
         </h3>
         <div className="w-full h-px bg-brand-red/20 mb-4" aria-hidden="true" />
-        {actionError && <p className="mb-3 text-sm text-red-600" role="alert">{actionError}</p>}
+        {actionError && (
+          <div className="mb-3 bg-red-50 border-l-2 border-red-500 p-3" role="alert">
+            <p className="text-[10px] font-bold text-red-700 uppercase tracking-wider">{actionError}</p>
+          </div>
+        )}
 
         {/* Desktop: table layout */}
         <div className="hidden sm:block overflow-x-auto">
           <table className="w-full text-left">
             <caption className="sr-only">Mitglieder verwalten</caption>
             <thead>
-              <tr className="border-b border-gray-200">
-                <th scope="col" className="text-xs uppercase tracking-wider text-gray-400 pb-3 font-medium">
+              <tr className="border-b border-gray-100">
+                <th scope="col" className="text-[10px] uppercase tracking-widest text-gray-400 pb-3 font-bold">
                   Name
                 </th>
-                <th scope="col" className="text-xs uppercase tracking-wider text-gray-400 pb-3 font-medium">
+                <th scope="col" className="text-[10px] uppercase tracking-widest text-gray-400 pb-3 font-bold">
                   Rolle
                 </th>
-                <th scope="col" className="text-xs uppercase tracking-wider text-gray-400 pb-3 font-medium">
+                <th scope="col" className="text-[10px] uppercase tracking-widest text-gray-400 pb-3 font-bold">
                   Aktion
                 </th>
               </tr>
             </thead>
             <tbody>
-              {members.map((m) => (
+              {members.map((m, i) => (
                 (() => {
                   const canToggleRole = canDemoteAdmin(members, m);
+                  const isMe = m.userId === me?._id;
                   return (
-                    <tr key={m._id} className="border-b border-gray-100">
+                    <tr key={m._id} className={cn("border-b border-gray-100 animate-slide-in-left", isMe && "bg-brand-navy/[0.03]")} style={{ animationDelay: `${Math.min(i * 0.05, 0.3)}s` }}>
                       <td className="py-3 font-medium max-w-[200px] truncate">
                         {m.displayName}
+                        {isMe && <span className="ml-2 text-[10px] uppercase tracking-widest font-bold text-gray-400">(Du)</span>}
                       </td>
                       <td className="py-3">
                         <Badge variant={m.role === "admin" ? "brandRed" : "muted"} size="xs">
@@ -311,17 +322,20 @@ export function GroupSettings() {
 
         {/* Mobile: card layout */}
         <div className="sm:hidden space-y-3">
-          {members.map((m) => (
+          {members.map((m, i) => (
             (() => {
               const canToggleRole = canDemoteAdmin(members, m);
+              const isMe = m.userId === me?._id;
               return (
                 <div
                   key={m._id}
-                  className="rounded-xl border border-gray-200 p-3 space-y-2"
+                  className={cn("rounded-xl border border-gray-100 bg-white p-3 shadow-sm space-y-2 animate-fade-in-up", isMe && "ring-2 ring-brand-navy/10")}
+                  style={{ animationDelay: `${Math.min(i * 0.05, 0.3)}s` }}
                 >
                   <div className="flex items-center justify-between gap-2">
                     <span className="font-medium text-sm truncate min-w-0">
                       {m.displayName}
+                      {isMe && <span className="ml-1.5 text-[10px] uppercase tracking-widest font-bold text-gray-400">(Du)</span>}
                     </span>
                     <Badge variant={m.role === "admin" ? "brandRed" : "muted"} size="xs" className="shrink-0">
                       {m.role === "admin" ? "Admin" : "Mitglied"}
