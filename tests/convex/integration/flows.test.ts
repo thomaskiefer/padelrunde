@@ -234,6 +234,110 @@ describe("convex integration flows", () => {
     expect(updatedMatch?.reportedBy).toBe(participantUser._id);
   });
 
+  it("shows all group tournaments to every group member even when they are not selected to play", async () => {
+    const t = createTestClient();
+    const owner = await upsertUser(t, "visibility-owner", {
+      canCreateGroup: true,
+    });
+    const player1 = await upsertUser(t, "visibility-player-1");
+    const player2 = await upsertUser(t, "visibility-player-2");
+    const player3 = await upsertUser(t, "visibility-player-3");
+    const player4 = await upsertUser(t, "visibility-player-4");
+    await upsertUser(t, "visibility-outsider");
+    const spectator = await upsertUser(t, "visibility-spectator");
+
+    const ownerCtx = t.withIdentity({ subject: "visibility-owner" });
+    const groupId = await ownerCtx.mutation(api.groups.create, {
+      name: "Visibility Group",
+      slug: "visibility-group",
+    });
+
+    for (const user of [player1, player2, player3, player4, spectator]) {
+      await ownerCtx.mutation(api.groups.addMember, {
+        groupId,
+        userId: user._id,
+        displayName: user.name,
+      });
+    }
+
+    const members = await ownerCtx.query(api.groups.getMembers, { groupId });
+    const memberIdByUserId = new Map(
+      members.map((member) => [member.userId, member._id])
+    );
+
+    const firstTournamentId = await ownerCtx.mutation(api.tournaments.create, {
+      groupId,
+      name: "Morning Americano",
+      mode: "americano",
+      courts: 1,
+      playerIds: [
+        owner._id,
+        player1._id,
+        player2._id,
+        player3._id,
+      ].map((userId) => memberIdByUserId.get(userId)!),
+    });
+    const secondTournamentId = await ownerCtx.mutation(api.tournaments.create, {
+      groupId,
+      name: "Evening Americano",
+      mode: "americano",
+      courts: 2,
+      playerIds: [
+        owner._id,
+        player2._id,
+        player3._id,
+        player4._id,
+      ].map((userId) => memberIdByUserId.get(userId)!),
+    });
+
+    await ownerCtx.mutation(api.rounds.generateRounds, {
+      tournamentId: firstTournamentId,
+    });
+    await ownerCtx.mutation(api.rounds.generateRounds, {
+      tournamentId: secondTournamentId,
+    });
+
+    const spectatorCtx = t.withIdentity({ subject: "visibility-spectator" });
+    const visibleTournaments = await spectatorCtx.query(api.tournaments.listByGroup, {
+      groupId,
+    });
+    expect(visibleTournaments.map((tournament) => tournament._id)).toEqual(
+      expect.arrayContaining([firstTournamentId, secondTournamentId])
+    );
+
+    expect(
+      await spectatorCtx.query(api.tournaments.get, {
+        tournamentId: firstTournamentId,
+      })
+    ).not.toBeNull();
+    expect(
+      await spectatorCtx.query(api.tournaments.get, {
+        tournamentId: secondTournamentId,
+      })
+    ).not.toBeNull();
+
+    const visibleRounds = await spectatorCtx.query(api.rounds.listByTournament, {
+      tournamentId: firstTournamentId,
+    });
+    expect(visibleRounds.length).toBeGreaterThan(0);
+
+    const firstRound = visibleRounds[0] ?? fail("Missing visible first round");
+    const visibleMatches = await spectatorCtx.query(api.matches.getByRound, {
+      roundId: firstRound._id,
+    });
+    expect(visibleMatches.length).toBeGreaterThan(0);
+
+    const outsiderCtx = t.withIdentity({ subject: "visibility-outsider" });
+    await expect(
+      outsiderCtx.query(api.tournaments.listByGroup, { groupId })
+    ).rejects.toThrow("Kein Mitglied");
+    expect(
+      await outsiderCtx.query(api.tournaments.get, {
+        tournamentId: firstTournamentId,
+      })
+    ).toBeNull();
+  });
+
   it("records edit history when an admin changes an existing result", async () => {
     const t = createTestClient();
     const { firstMatch, owner, ownerCtx } = await setupAmericanoTournament(t);
@@ -922,6 +1026,334 @@ describe("convex integration flows", () => {
     } finally {
       process.env.SUPERADMIN_CLERK_IDS = previousSuperAdminIds;
     }
+  });
+
+  it("lets promoted group admins manage members and tournaments", async () => {
+    const t = createTestClient();
+    const owner = await upsertUser(t, "promote-owner", { canCreateGroup: true });
+    const promotedUser = await upsertUser(t, "promote-admin");
+    const player1 = await upsertUser(t, "promote-player-1");
+    const player2 = await upsertUser(t, "promote-player-2");
+    const lateJoiner = await upsertUser(t, "promote-late-joiner");
+
+    const ownerCtx = t.withIdentity({ subject: "promote-owner" });
+    const groupId = await ownerCtx.mutation(api.groups.create, {
+      name: "Promotion Group",
+      slug: "promotion-group",
+    });
+
+    for (const user of [promotedUser, player1, player2]) {
+      await ownerCtx.mutation(api.groups.addMember, {
+        groupId,
+        userId: user._id,
+        displayName: user.name,
+      });
+    }
+
+    const promotedCtx = t.withIdentity({ subject: "promote-admin" });
+    await expect(
+      promotedCtx.mutation(api.groups.addMember, {
+        groupId,
+        userId: lateJoiner._id,
+        displayName: lateJoiner.name,
+      })
+    ).rejects.toThrow("Nur für Admins");
+
+    const membersBeforePromotion = await ownerCtx.query(api.groups.getMembers, {
+      groupId,
+    });
+    const promotedMembership = membersBeforePromotion.find(
+      (member) => member.userId === promotedUser._id
+    );
+    if (!promotedMembership) fail("Missing promoted member");
+
+    await ownerCtx.mutation(api.groups.updateMemberRole, {
+      memberId: promotedMembership._id,
+      role: "admin",
+    });
+
+    await promotedCtx.mutation(api.groups.addMember, {
+      groupId,
+      userId: lateJoiner._id,
+      displayName: "Late Joiner",
+    });
+
+    const membersAfterPromotion = await promotedCtx.query(api.groups.getMembers, {
+      groupId,
+    });
+    expect(
+      membersAfterPromotion.find((member) => member.userId === lateJoiner._id)
+        ?.displayName
+    ).toBe("Late Joiner");
+
+    const tournamentPlayers = membersAfterPromotion
+      .filter((member) =>
+        [owner._id, promotedUser._id, player1._id, player2._id].includes(
+          member.userId
+        )
+      )
+      .map((member) => member._id);
+
+    const tournamentId = await promotedCtx.mutation(api.tournaments.create, {
+      groupId,
+      name: "Admin Created Americano",
+      mode: "americano",
+      courts: 1,
+      playerIds: tournamentPlayers,
+    });
+    await promotedCtx.mutation(api.rounds.generateRounds, { tournamentId });
+
+    const createdTournament = await promotedCtx.query(api.tournaments.get, {
+      tournamentId,
+    });
+    expect(createdTournament?.createdBy).toBe(promotedUser._id);
+  });
+
+  it("creates reusable invite tokens and lets invited users join privately", async () => {
+    const t = createTestClient();
+    await upsertUser(t, "invite-owner", { canCreateGroup: true });
+    const player1 = await upsertUser(t, "invite-player-1");
+    const player2 = await upsertUser(t, "invite-player-2");
+    const player3 = await upsertUser(t, "invite-player-3");
+    await upsertUser(t, "invite-outsider");
+    await upsertUser(t, "invite-joiner-1");
+    await upsertUser(t, "invite-joiner-2");
+
+    const ownerCtx = t.withIdentity({ subject: "invite-owner" });
+    const groupId = await ownerCtx.mutation(api.groups.create, {
+      name: "Invite Group",
+      slug: "invite-group",
+    });
+
+    for (const user of [player1, player2, player3]) {
+      await ownerCtx.mutation(api.groups.addMember, {
+        groupId,
+        userId: user._id,
+        displayName: user.name,
+      });
+    }
+
+    const members = await ownerCtx.query(api.groups.getMembers, { groupId });
+    const tournamentId = await ownerCtx.mutation(api.tournaments.create, {
+      groupId,
+      name: "Invite Americano",
+      mode: "americano",
+      courts: 1,
+      playerIds: members.map((member) => member._id),
+    });
+
+    const invite = await ownerCtx.mutation(api.groups.createInviteToken, {
+      groupId,
+      label: "Open Training",
+    });
+    await ownerCtx.mutation(api.groups.createInviteToken, {
+      groupId,
+      label: "Reserve Link",
+    });
+
+    const inviteList = await ownerCtx.query(api.groups.listInviteTokens, { groupId });
+    expect(inviteList).toHaveLength(2);
+    expect(inviteList.every((entry) => entry.status === "active")).toBe(true);
+
+    const outsiderCtx = t.withIdentity({ subject: "invite-outsider" });
+    expect(
+      await outsiderCtx.query(api.groups.getBySlug, { slug: "invite-group" })
+    ).toBeNull();
+    await expect(
+      outsiderCtx.query(api.tournaments.listByGroup, { groupId })
+    ).rejects.toThrow("Kein Mitglied");
+
+    const joinerOneCtx = t.withIdentity({ subject: "invite-joiner-1" });
+    const joinResultOne = await joinerOneCtx.mutation(api.groups.joinWithInvite, {
+      token: invite.token,
+      displayName: "Joiner One",
+    });
+    expect(joinResultOne.groupSlug).toBe("invite-group");
+
+    const groupAfterJoin = await joinerOneCtx.query(api.groups.getBySlug, {
+      slug: "invite-group",
+    });
+    expect(groupAfterJoin?._id).toBe(groupId);
+    const visibleTournaments = await joinerOneCtx.query(api.tournaments.listByGroup, {
+      groupId,
+    });
+    expect(visibleTournaments.map((entry) => entry._id)).toContain(tournamentId);
+
+    const joinerTwoCtx = t.withIdentity({ subject: "invite-joiner-2" });
+    const joinResultTwo = await joinerTwoCtx.mutation(api.groups.joinWithInvite, {
+      token: invite.token,
+      displayName: "Joiner Two",
+    });
+    expect(joinResultTwo.groupSlug).toBe("invite-group");
+
+    await expect(
+      joinerOneCtx.mutation(api.groups.joinWithInvite, {
+        token: invite.token,
+        displayName: "Joiner One",
+      })
+    ).rejects.toThrow("Du bist bereits Mitglied dieser Gruppe");
+
+    await expect(
+      outsiderCtx.mutation(api.groups.joinWithInvite, {
+        token: invite.token,
+        displayName: "   ",
+      })
+    ).rejects.toThrow("Bitte gib einen Anzeigenamen an.");
+
+    const joinInvite = await outsiderCtx.query(api.groups.getJoinInvite, {
+      token: invite.token,
+    });
+    expect(joinInvite.status).toBe("active");
+    if (joinInvite.status !== "active") fail("Expected active invite");
+    expect(joinInvite.group.slug).toBe("invite-group");
+  });
+
+  it("revokes and expires invite tokens", async () => {
+    const t = createTestClient();
+    await upsertUser(t, "invite-admin", { canCreateGroup: true });
+    const player1 = await upsertUser(t, "invite-admin-player-1");
+    const player2 = await upsertUser(t, "invite-admin-player-2");
+    const player3 = await upsertUser(t, "invite-admin-player-3");
+    await upsertUser(t, "invite-late-joiner");
+    await upsertUser(t, "invite-expired-joiner");
+
+    const ownerCtx = t.withIdentity({ subject: "invite-admin" });
+    const groupId = await ownerCtx.mutation(api.groups.create, {
+      name: "Invite Admin Group",
+      slug: "invite-admin-group",
+    });
+    for (const user of [player1, player2, player3]) {
+      await ownerCtx.mutation(api.groups.addMember, {
+        groupId,
+        userId: user._id,
+        displayName: user.name,
+      });
+    }
+
+    const revokableInvite = await ownerCtx.mutation(api.groups.createInviteToken, {
+      groupId,
+      label: "Revokable",
+    });
+    const expirableInvite = await ownerCtx.mutation(api.groups.createInviteToken, {
+      groupId,
+      label: "Expirable",
+    });
+
+    const inviteTokens = await ownerCtx.query(api.groups.listInviteTokens, { groupId });
+    const revokableRecord = inviteTokens.find((entry) => entry.label === "Revokable");
+    const expirableRecord = inviteTokens.find((entry) => entry.label === "Expirable");
+    if (!revokableRecord || !expirableRecord) fail("Missing invite records");
+
+    await ownerCtx.mutation(api.groups.revokeInviteToken, {
+      inviteTokenId: revokableRecord._id,
+    });
+    const revokedStatus = await ownerCtx.query(api.groups.getJoinInvite, {
+      token: revokableInvite.token,
+    });
+    expect(revokedStatus.status).toBe("revoked");
+
+    const lateJoinerCtx = t.withIdentity({ subject: "invite-late-joiner" });
+    await expect(
+      lateJoinerCtx.mutation(api.groups.joinWithInvite, {
+        token: revokableInvite.token,
+        displayName: "Late Joiner",
+      })
+    ).rejects.toThrow("Einladung wurde widerrufen");
+
+    await t.run((ctx) =>
+      ctx.db.patch("groupInviteTokens", expirableRecord._id, {
+        expiresAt: Date.now() - 1_000,
+      })
+    );
+
+    const expiredStatus = await ownerCtx.query(api.groups.getJoinInvite, {
+      token: expirableInvite.token,
+    });
+    expect(expiredStatus.status).toBe("expired");
+
+    const expiredJoinerCtx = t.withIdentity({ subject: "invite-expired-joiner" });
+    await expect(
+      expiredJoinerCtx.mutation(api.groups.joinWithInvite, {
+        token: expirableInvite.token,
+        displayName: "Expired Joiner",
+      })
+    ).rejects.toThrow("Einladung ist abgelaufen");
+  });
+
+  it("allows deleting revoked and expired invite tokens", async () => {
+    const t = createTestClient();
+    await upsertUser(t, "invite-delete-admin", { canCreateGroup: true });
+    const player1 = await upsertUser(t, "invite-delete-player-1");
+    const player2 = await upsertUser(t, "invite-delete-player-2");
+    const player3 = await upsertUser(t, "invite-delete-player-3");
+
+    const ownerCtx = t.withIdentity({ subject: "invite-delete-admin" });
+    const groupId = await ownerCtx.mutation(api.groups.create, {
+      name: "Invite Delete Group",
+      slug: "invite-delete-group",
+    });
+    for (const user of [player1, player2, player3]) {
+      await ownerCtx.mutation(api.groups.addMember, {
+        groupId,
+        userId: user._id,
+        displayName: user.name,
+      });
+    }
+
+    await ownerCtx.mutation(api.groups.createInviteToken, {
+      groupId,
+      label: "Delete Revoked",
+    });
+    await ownerCtx.mutation(api.groups.createInviteToken, {
+      groupId,
+      label: "Delete Expired",
+    });
+
+    const inviteTokens = await ownerCtx.query(api.groups.listInviteTokens, { groupId });
+    const revokedRecord = inviteTokens.find((entry) => entry.label === "Delete Revoked");
+    const expiredRecord = inviteTokens.find((entry) => entry.label === "Delete Expired");
+    if (!revokedRecord || !expiredRecord) fail("Missing invite records");
+
+    await ownerCtx.mutation(api.groups.revokeInviteToken, {
+      inviteTokenId: revokedRecord._id,
+    });
+    await ownerCtx.mutation(api.groups.deleteInviteToken, {
+      inviteTokenId: revokedRecord._id,
+    });
+
+    await t.run((ctx) =>
+      ctx.db.patch("groupInviteTokens", expiredRecord._id, {
+        expiresAt: Date.now() - 1_000,
+      })
+    );
+    await ownerCtx.mutation(api.groups.deleteInviteToken, {
+      inviteTokenId: expiredRecord._id,
+    });
+
+    const remainingInvites = await ownerCtx.query(api.groups.listInviteTokens, {
+      groupId,
+    });
+    expect(remainingInvites).toHaveLength(0);
+
+    const activeInvite = await ownerCtx.mutation(api.groups.createInviteToken, {
+      groupId,
+      label: "Delete Active",
+    });
+    const activeRecord = (
+      await ownerCtx.query(api.groups.listInviteTokens, { groupId })
+    ).find((entry) => entry.label === "Delete Active");
+    if (!activeRecord) fail("Missing active invite");
+
+    await expect(
+      ownerCtx.mutation(api.groups.deleteInviteToken, {
+        inviteTokenId: activeRecord._id,
+      })
+    ).rejects.toThrow("Aktive Einladungen müssen zuerst widerrufen werden");
+
+    const stillUsable = await ownerCtx.query(api.groups.getJoinInvite, {
+      token: activeInvite.token,
+    });
+    expect(stillUsable.status).toBe("active");
   });
 
   it("rejects whitespace-only member display names on the backend", async () => {
