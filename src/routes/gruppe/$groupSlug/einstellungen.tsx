@@ -2,20 +2,13 @@ import { Link, createFileRoute } from "@tanstack/react-router";
 import { useQuery, useSuspenseQuery } from "@tanstack/react-query";
 import { useMutation } from "convex/react";
 import { convexQuery } from "@convex-dev/react-query";
-import { useEffect, useState } from "react";
+import { useMemo, useState } from "react";
 import { api } from "../../../../convex/_generated/api";
 import { resolveSettingsAccess } from "./-access";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "~/components/ui/select";
 import { canDemoteAdmin } from "~/lib/groupPermissions";
 import { cn } from "~/lib/utils";
 
@@ -36,42 +29,40 @@ export function GroupSettings() {
     ...membersQuery,
     enabled: !!group,
   });
-  const addableUsersQuery = convexQuery(api.groups.listAddableUsers, {
+  const inviteTokensQuery = convexQuery(api.groups.listInviteTokens, {
     groupId: (group?._id ?? "missing") as any,
   });
   const updateMemberRole = useMutation(api.groups.updateMemberRole);
-  const addMember = useMutation(api.groups.addMember);
+  const createInviteToken = useMutation(api.groups.createInviteToken);
+  const revokeInviteToken = useMutation(api.groups.revokeInviteToken);
+  const deleteInviteToken = useMutation(api.groups.deleteInviteToken);
   const [actionError, setActionError] = useState("");
   const [actionLoadingMemberId, setActionLoadingMemberId] = useState<string | null>(null);
-  const [addError, setAddError] = useState("");
-  const [selectedUserId, setSelectedUserId] = useState("");
-  const [displayName, setDisplayName] = useState("");
-  const [newMemberRole, setNewMemberRole] = useState<"admin" | "member">("member");
-  const [isAddingMember, setIsAddingMember] = useState(false);
-  const [prefilledUserId, setPrefilledUserId] = useState("");
+  const [inviteError, setInviteError] = useState("");
+  const [inviteLabel, setInviteLabel] = useState("");
+  const [isCreatingInvite, setIsCreatingInvite] = useState(false);
+  const [revokingInviteId, setRevokingInviteId] = useState<string | null>(null);
+  const [deletingInviteId, setDeletingInviteId] = useState<string | null>(null);
+  const [copiedInviteId, setCopiedInviteId] = useState<string | null>(null);
+  const [latestInvite, setLatestInvite] = useState<{
+    inviteTokenId: string;
+    token: string;
+    groupSlug: string;
+    expiresAt: number;
+    label?: string;
+  } | null>(null);
 
   const access = group
     ? resolveSettingsAccess(me ?? null, members, membersLoading)
     : "denied";
-  const { data: addableUsers = [] } = useQuery({
-    ...addableUsersQuery,
+  const { data: inviteTokens = [] } = useQuery({
+    ...inviteTokensQuery,
     enabled: !!group && access === "allowed",
   });
-
-  useEffect(() => {
-    if (!selectedUserId) {
-      setDisplayName("");
-      setPrefilledUserId("");
-      return;
-    }
-    if (prefilledUserId === selectedUserId) return;
-
-    const selectedUser = addableUsers.find((user) => user._id === selectedUserId);
-    if (selectedUser) {
-      setDisplayName(selectedUser.name);
-      setPrefilledUserId(selectedUserId);
-    }
-  }, [addableUsers, prefilledUserId, selectedUserId]);
+  const origin = useMemo(
+    () => (typeof window !== "undefined" ? window.location.origin : ""),
+    []
+  );
 
   if (!group) {
     return (
@@ -120,36 +111,65 @@ export function GroupSettings() {
     }
   };
 
-  const handleAddMember = async (event: React.FormEvent<HTMLFormElement>) => {
+  const buildInviteUrl = (token: string) =>
+    origin
+      ? `${origin}/gruppe/${groupSlug}/beitreten/${token}`
+      : `/gruppe/${groupSlug}/beitreten/${token}`;
+
+  const handleCreateInvite = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setAddError("");
-
-    const selectedUser = addableUsers.find((user) => user._id === selectedUserId);
-    if (!selectedUser) {
-      setAddError("Bitte wähle einen Benutzer aus.");
-      return;
-    }
-    if (!displayName.trim()) {
-      setAddError("Bitte gib einen Anzeigenamen an.");
-      return;
-    }
-
-    setIsAddingMember(true);
+    setInviteError("");
+    setIsCreatingInvite(true);
     try {
-      await addMember({
+      const createdInvite = await createInviteToken({
         groupId: group._id,
-        userId: selectedUser._id,
-        displayName: displayName.trim(),
-        role: newMemberRole,
+        label: inviteLabel.trim() || undefined,
       });
-      setSelectedUserId("");
-      setDisplayName("");
-      setNewMemberRole("member");
-      setPrefilledUserId("");
+      setLatestInvite(createdInvite);
+      setInviteLabel("");
     } catch (err: any) {
-      setAddError(err.message ?? "Mitglied konnte nicht hinzugefügt werden.");
+      setInviteError(err.message ?? "Einladungslink konnte nicht erstellt werden.");
     } finally {
-      setIsAddingMember(false);
+      setIsCreatingInvite(false);
+    }
+  };
+
+  const copyInvite = async (inviteId: string, token: string) => {
+    try {
+      await navigator.clipboard.writeText(buildInviteUrl(token));
+      setCopiedInviteId(inviteId);
+      setTimeout(() => {
+        setCopiedInviteId((current) => (current === inviteId ? null : current));
+      }, 1500);
+    } catch {
+      setInviteError("Link konnte nicht kopiert werden.");
+    }
+  };
+
+  const handleRevokeInvite = async (inviteTokenId: string) => {
+    setInviteError("");
+    setRevokingInviteId(inviteTokenId);
+    try {
+      await revokeInviteToken({ inviteTokenId: inviteTokenId as any });
+    } catch (err: any) {
+      setInviteError(err.message ?? "Einladung konnte nicht widerrufen werden.");
+    } finally {
+      setRevokingInviteId(null);
+    }
+  };
+
+  const handleDeleteInvite = async (inviteTokenId: string) => {
+    setInviteError("");
+    setDeletingInviteId(inviteTokenId);
+    try {
+      await deleteInviteToken({ inviteTokenId: inviteTokenId as any });
+      if (latestInvite?.inviteTokenId === inviteTokenId) {
+        setLatestInvite(null);
+      }
+    } catch (err: any) {
+      setInviteError(err.message ?? "Einladung konnte nicht gelöscht werden.");
+    } finally {
+      setDeletingInviteId(null);
     }
   };
 
@@ -170,84 +190,162 @@ export function GroupSettings() {
 
       <section>
         <h3 className="section-title-accent font-display text-sm uppercase tracking-widest text-brand-navy mb-4">
-          Mitglied hinzufügen
+          Einladungen
         </h3>
         <form
-          onSubmit={handleAddMember}
-          className="relative overflow-hidden rounded-xl border border-gray-100 bg-white p-4 sm:p-5 shadow-sm space-y-4"
+          onSubmit={handleCreateInvite}
+          className="rounded-xl border border-gray-100 bg-white p-4 sm:p-5 shadow-sm space-y-4"
         >
-          <div className="absolute top-0 right-0 w-16 h-16 -mr-8 -mt-8 rotate-45 bg-brand-navy/5" aria-hidden="true" />
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="member-user" className="text-[10px] uppercase tracking-widest font-bold text-gray-400">Benutzer</Label>
-              <Select value={selectedUserId} onValueChange={setSelectedUserId}>
-                <SelectTrigger id="member-user" className="w-full h-12">
-                  <SelectValue placeholder="Benutzer auswählen" />
-                </SelectTrigger>
-                <SelectContent>
-                  {addableUsers.map((user) => (
-                    <SelectItem key={user._id} value={user._id}>
-                      {user.name} ({user.email})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="member-role" className="text-[10px] uppercase tracking-widest font-bold text-gray-400">Rolle</Label>
-              <Select
-                value={newMemberRole}
-                onValueChange={(value: "admin" | "member") => setNewMemberRole(value)}
-              >
-                <SelectTrigger id="member-role" className="w-full h-12">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="member">Mitglied</SelectItem>
-                  <SelectItem value="admin">Admin</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
           <div className="space-y-2">
-            <Label htmlFor="display-name" className="text-[10px] uppercase tracking-widest font-bold text-gray-400">Anzeigename</Label>
+            <Label htmlFor="invite-label" className="text-[10px] uppercase tracking-widest font-bold text-gray-400">Bezeichnung (optional)</Label>
             <Input
-              id="display-name"
-              value={displayName}
-              onChange={(event) => setDisplayName(event.target.value)}
-              placeholder="Name in der Gruppe"
+              id="invite-label"
+              value={inviteLabel}
+              onChange={(event) => setInviteLabel(event.target.value)}
+              placeholder="z.B. Training Mittwoch"
               className="h-12"
             />
           </div>
 
-          {addError && (
+          {latestInvite && (
+            <div className="space-y-2 rounded-xl border border-brand-teal/20 bg-brand-teal/5 p-3">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-brand-teal">
+                Neuer Link erstellt
+              </p>
+              <Input
+                readOnly
+                value={buildInviteUrl(latestInvite.token)}
+                className="h-12 bg-white"
+              />
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-xs text-gray-500">
+                  Läuft am {new Date(latestInvite.expiresAt).toLocaleString("de-DE")} ab.
+                </p>
+                <Button
+                  type="button"
+                  variant="brandTeal"
+                  size="touchLg"
+                  onClick={() =>
+                    copyInvite(latestInvite.inviteTokenId, latestInvite.token)
+                  }
+                >
+                  {copiedInviteId === latestInvite.inviteTokenId ? "Kopiert" : "Link kopieren"}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {inviteError && (
             <div className="bg-red-50 border-l-2 border-red-500 p-3" role="alert">
-              <p className="text-[10px] font-bold text-red-700 uppercase tracking-wider">
-                {addError}
+              <p className="text-[10px] font-bold text-red-700 uppercase tracking-widest">
+                {inviteError}
               </p>
             </div>
           )}
 
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-xs text-gray-500">
-              Wähle einen registrierten Benutzer aus und passe den Anzeigenamen bei Bedarf an.
+              Einladungslinks sind 7 Tage gültig, können mehrfach genutzt und jederzeit widerrufen werden.
             </p>
             <Button
               type="submit"
               variant="brand"
               size="touchLg"
-              disabled={isAddingMember || addableUsers.length === 0}
+              disabled={isCreatingInvite}
             >
-              {addableUsers.length === 0
-                ? "Keine weiteren Benutzer"
-                : isAddingMember
-                  ? "Wird hinzugefügt..."
-                  : "Mitglied hinzufügen"}
+              {isCreatingInvite ? "Wird erstellt..." : "Einladungslink erstellen"}
             </Button>
           </div>
         </form>
+
+        <div className="mt-4 space-y-3">
+          {inviteTokens.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-gray-200 bg-white/70 p-4 text-sm text-gray-500">
+              Noch keine Einladungen erstellt.
+            </div>
+          ) : (
+            inviteTokens.map((invite, index) => {
+              const inviteUrl = buildInviteUrl(invite.token);
+              const statusLabel =
+                invite.status === "active"
+                  ? "Aktiv"
+                  : invite.status === "expired"
+                    ? "Abgelaufen"
+                    : "Widerrufen";
+              const statusVariant =
+                invite.status === "active"
+                  ? "brandTeal"
+                  : invite.status === "expired"
+                    ? "muted"
+                    : "brandRed";
+
+              return (
+                <div
+                  key={invite._id}
+                  className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm animate-fade-in-up"
+                  style={{ animationDelay: `${Math.min(index * 0.05, 0.3)}s` }}
+                >
+                  <div className="space-y-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="space-y-1 min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-medium text-brand-navy">
+                            {invite.label || "Einladungslink"}
+                          </p>
+                          <Badge variant={statusVariant} size="xs">
+                            {statusLabel}
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-gray-500">
+                          Erstellt am {new Date(invite.createdAt).toLocaleString("de-DE")} · Gültig bis {new Date(invite.expiresAt).toLocaleString("de-DE")}
+                        </p>
+                      </div>
+                      {invite.status === "active" ? (
+                        <Button
+                          type="button"
+                          variant="brandDestructive"
+                          size="sm"
+                          className="shrink-0"
+                          disabled={revokingInviteId === invite._id}
+                          onClick={() => handleRevokeInvite(invite._id)}
+                        >
+                          {revokingInviteId === invite._id ? "..." : "Widerrufen"}
+                        </Button>
+                      ) : (
+                        <Button
+                          type="button"
+                          variant="brandDestructive"
+                          size="sm"
+                          className="shrink-0"
+                          disabled={deletingInviteId === invite._id}
+                          onClick={() => handleDeleteInvite(invite._id)}
+                        >
+                          {deletingInviteId === invite._id ? "..." : "Löschen"}
+                        </Button>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <Input
+                        readOnly
+                        value={inviteUrl}
+                        className="h-8 min-w-0 flex-1 bg-gray-50 text-xs"
+                      />
+                      <Button
+                        type="button"
+                        variant="brandOutline"
+                        size="sm"
+                        className="shrink-0"
+                        onClick={() => copyInvite(invite._id, invite.token)}
+                      >
+                        {copiedInviteId === invite._id ? "Kopiert" : "Link kopieren"}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
       </section>
 
       <section>
@@ -256,7 +354,7 @@ export function GroupSettings() {
         </h3>
         {actionError && (
           <div className="mb-3 bg-red-50 border-l-2 border-red-500 p-3" role="alert">
-            <p className="text-[10px] font-bold text-red-700 uppercase tracking-wider">{actionError}</p>
+            <p className="text-[10px] font-bold text-red-700 uppercase tracking-widest">{actionError}</p>
           </div>
         )}
 
@@ -283,8 +381,8 @@ export function GroupSettings() {
                   const canToggleRole = canDemoteAdmin(members, m);
                   const isMe = m.userId === me?._id;
                   return (
-                    <tr key={m._id} className={cn("border-b border-gray-100 animate-slide-in-left", isMe && "bg-brand-navy/[0.03]")} style={{ animationDelay: `${Math.min(i * 0.05, 0.3)}s` }}>
-                      <td className="px-4 py-4 font-medium max-w-[200px] truncate">
+                    <tr key={m._id} className={cn("animate-slide-in-left hover:bg-gray-50/50 transition-colors", isMe && "bg-brand-navy/[0.03]")} style={{ animationDelay: `${Math.min(i * 0.05, 0.3)}s` }}>
+                      <td className="px-4 py-4 font-semibold text-brand-navy text-sm max-w-[200px] truncate">
                         {m.displayName}
                         {isMe && <span className="ml-2 text-[10px] uppercase tracking-widest font-bold text-gray-400">(Du)</span>}
                       </td>
@@ -294,21 +392,21 @@ export function GroupSettings() {
                         </Badge>
                       </td>
                       <td className="px-4 py-4">
-                        <Button
-                          variant="brandOutline"
-                          size="touchLg"
-                          aria-label={`${m.displayName} ${m.role === "admin" ? "zum Mitglied" : "zum Admin"} machen`}
-                          onClick={() => handleRoleToggle(m._id, m.role)}
-                          disabled={
-                            actionLoadingMemberId === m._id || !canToggleRole
-                          }
-                        >
-                          {!canToggleRole
-                            ? "Mind. 1 Admin"
-                            : m.role === "admin"
+                        {!canToggleRole ? (
+                          <Badge variant="muted" size="xs">Mind. 1 Admin</Badge>
+                        ) : (
+                          <Button
+                            variant="brandOutline"
+                            size="sm"
+                            aria-label={`${m.displayName} ${m.role === "admin" ? "zum Mitglied" : "zum Admin"} machen`}
+                            onClick={() => handleRoleToggle(m._id, m.role)}
+                            disabled={actionLoadingMemberId === m._id}
+                          >
+                            {m.role === "admin"
                               ? "Zum Mitglied machen"
                               : "Zum Admin machen"}
-                        </Button>
+                          </Button>
+                        )}
                       </td>
                     </tr>
                   );

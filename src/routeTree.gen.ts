@@ -15,6 +15,7 @@ import { Route as GruppeNeuRouteImport } from './routes/gruppe/neu'
 import { Route as GruppeGroupSlugIndexRouteImport } from './routes/gruppe/$groupSlug/index'
 import { Route as GruppeGroupSlugEinstellungenRouteImport } from './routes/gruppe/$groupSlug/einstellungen'
 import { Route as GruppeGroupSlugTurnierNeuRouteImport } from './routes/gruppe/$groupSlug/turnier/neu'
+import { Route as GruppeGroupSlugBeitretenTokenRouteImport } from './routes/gruppe/$groupSlug/beitreten/$token'
 import { Route as GruppeGroupSlugTurnierTournamentIdIndexRouteImport } from './routes/gruppe/$groupSlug/turnier/$tournamentId/index'
 import { Route as GruppeGroupSlugTurnierTournamentIdAdminRouteImport } from './routes/gruppe/$groupSlug/turnier/$tournamentId/admin'
 
@@ -50,6 +51,12 @@ const GruppeGroupSlugTurnierNeuRoute =
     path: '/gruppe/$groupSlug/turnier/neu',
     getParentRoute: () => rootRouteImport,
   } as any)
+const GruppeGroupSlugBeitretenTokenRoute =
+  GruppeGroupSlugBeitretenTokenRouteImport.update({
+    id: '/gruppe/$groupSlug/beitreten/$token',
+    path: '/gruppe/$groupSlug/beitreten/$token',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const GruppeGroupSlugTurnierTournamentIdIndexRoute =
   GruppeGroupSlugTurnierTournamentIdIndexRouteImport.update({
     id: '/gruppe/$groupSlug/turnier/$tournamentId/',
@@ -69,6 +76,7 @@ export interface FileRoutesByFullPath {
   '/internal/': typeof InternalIndexRoute
   '/gruppe/$groupSlug/einstellungen': typeof GruppeGroupSlugEinstellungenRoute
   '/gruppe/$groupSlug/': typeof GruppeGroupSlugIndexRoute
+  '/gruppe/$groupSlug/beitreten/$token': typeof GruppeGroupSlugBeitretenTokenRoute
   '/gruppe/$groupSlug/turnier/neu': typeof GruppeGroupSlugTurnierNeuRoute
   '/gruppe/$groupSlug/turnier/$tournamentId/admin': typeof GruppeGroupSlugTurnierTournamentIdAdminRoute
   '/gruppe/$groupSlug/turnier/$tournamentId/': typeof GruppeGroupSlugTurnierTournamentIdIndexRoute
@@ -79,6 +87,7 @@ export interface FileRoutesByTo {
   '/internal': typeof InternalIndexRoute
   '/gruppe/$groupSlug/einstellungen': typeof GruppeGroupSlugEinstellungenRoute
   '/gruppe/$groupSlug': typeof GruppeGroupSlugIndexRoute
+  '/gruppe/$groupSlug/beitreten/$token': typeof GruppeGroupSlugBeitretenTokenRoute
   '/gruppe/$groupSlug/turnier/neu': typeof GruppeGroupSlugTurnierNeuRoute
   '/gruppe/$groupSlug/turnier/$tournamentId/admin': typeof GruppeGroupSlugTurnierTournamentIdAdminRoute
   '/gruppe/$groupSlug/turnier/$tournamentId': typeof GruppeGroupSlugTurnierTournamentIdIndexRoute
@@ -90,6 +99,7 @@ export interface FileRoutesById {
   '/internal/': typeof InternalIndexRoute
   '/gruppe/$groupSlug/einstellungen': typeof GruppeGroupSlugEinstellungenRoute
   '/gruppe/$groupSlug/': typeof GruppeGroupSlugIndexRoute
+  '/gruppe/$groupSlug/beitreten/$token': typeof GruppeGroupSlugBeitretenTokenRoute
   '/gruppe/$groupSlug/turnier/neu': typeof GruppeGroupSlugTurnierNeuRoute
   '/gruppe/$groupSlug/turnier/$tournamentId/admin': typeof GruppeGroupSlugTurnierTournamentIdAdminRoute
   '/gruppe/$groupSlug/turnier/$tournamentId/': typeof GruppeGroupSlugTurnierTournamentIdIndexRoute
@@ -102,6 +112,7 @@ export interface FileRouteTypes {
     | '/internal/'
     | '/gruppe/$groupSlug/einstellungen'
     | '/gruppe/$groupSlug/'
+    | '/gruppe/$groupSlug/beitreten/$token'
     | '/gruppe/$groupSlug/turnier/neu'
     | '/gruppe/$groupSlug/turnier/$tournamentId/admin'
     | '/gruppe/$groupSlug/turnier/$tournamentId/'
@@ -112,6 +123,7 @@ export interface FileRouteTypes {
     | '/internal'
     | '/gruppe/$groupSlug/einstellungen'
     | '/gruppe/$groupSlug'
+    | '/gruppe/$groupSlug/beitreten/$token'
     | '/gruppe/$groupSlug/turnier/neu'
     | '/gruppe/$groupSlug/turnier/$tournamentId/admin'
     | '/gruppe/$groupSlug/turnier/$tournamentId'
@@ -122,6 +134,7 @@ export interface FileRouteTypes {
     | '/internal/'
     | '/gruppe/$groupSlug/einstellungen'
     | '/gruppe/$groupSlug/'
+    | '/gruppe/$groupSlug/beitreten/$token'
     | '/gruppe/$groupSlug/turnier/neu'
     | '/gruppe/$groupSlug/turnier/$tournamentId/admin'
     | '/gruppe/$groupSlug/turnier/$tournamentId/'
@@ -133,6 +146,7 @@ export interface RootRouteChildren {
   InternalIndexRoute: typeof InternalIndexRoute
   GruppeGroupSlugEinstellungenRoute: typeof GruppeGroupSlugEinstellungenRoute
   GruppeGroupSlugIndexRoute: typeof GruppeGroupSlugIndexRoute
+  GruppeGroupSlugBeitretenTokenRoute: typeof GruppeGroupSlugBeitretenTokenRoute
   GruppeGroupSlugTurnierNeuRoute: typeof GruppeGroupSlugTurnierNeuRoute
   GruppeGroupSlugTurnierTournamentIdAdminRoute: typeof GruppeGroupSlugTurnierTournamentIdAdminRoute
   GruppeGroupSlugTurnierTournamentIdIndexRoute: typeof GruppeGroupSlugTurnierTournamentIdIndexRoute
@@ -182,6 +196,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof GruppeGroupSlugTurnierNeuRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/gruppe/$groupSlug/beitreten/$token': {
+      id: '/gruppe/$groupSlug/beitreten/$token'
+      path: '/gruppe/$groupSlug/beitreten/$token'
+      fullPath: '/gruppe/$groupSlug/beitreten/$token'
+      preLoaderRoute: typeof GruppeGroupSlugBeitretenTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/gruppe/$groupSlug/turnier/$tournamentId/': {
       id: '/gruppe/$groupSlug/turnier/$tournamentId/'
       path: '/gruppe/$groupSlug/turnier/$tournamentId'
@@ -205,6 +226,7 @@ const rootRouteChildren: RootRouteChildren = {
   InternalIndexRoute: InternalIndexRoute,
   GruppeGroupSlugEinstellungenRoute: GruppeGroupSlugEinstellungenRoute,
   GruppeGroupSlugIndexRoute: GruppeGroupSlugIndexRoute,
+  GruppeGroupSlugBeitretenTokenRoute: GruppeGroupSlugBeitretenTokenRoute,
   GruppeGroupSlugTurnierNeuRoute: GruppeGroupSlugTurnierNeuRoute,
   GruppeGroupSlugTurnierTournamentIdAdminRoute:
     GruppeGroupSlugTurnierTournamentIdAdminRoute,

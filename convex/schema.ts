@@ -32,6 +32,20 @@ export default defineSchema({
     .index("by_user", ["userId"])
     .index("by_group_and_user", ["groupId", "userId"]),
 
+  groupInviteTokens: defineTable({
+    groupId: v.id("groups"),
+    token: v.string(),
+    tokenHash: v.string(),
+    label: v.optional(v.string()),
+    createdBy: v.id("users"),
+    createdAt: v.number(),
+    expiresAt: v.number(),
+    revokedAt: v.optional(v.number()),
+    revokedBy: v.optional(v.id("users")),
+  })
+    .index("by_group", ["groupId"])
+    .index("by_token_hash", ["tokenHash"]),
+
   tournaments: defineTable({
     groupId: v.id("groups"),
     name: v.string(),

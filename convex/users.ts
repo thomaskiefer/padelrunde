@@ -334,6 +334,14 @@ export const deleteFromClerk = internalMutation({
         await ctx.db.delete("groupMembers", member._id);
       }
 
+      const inviteTokens = await ctx.db
+        .query("groupInviteTokens")
+        .withIndex("by_group", (q) => q.eq("groupId", groupId))
+        .collect();
+      for (const inviteToken of inviteTokens) {
+        await ctx.db.delete("groupInviteTokens", inviteToken._id);
+      }
+
       await ctx.db.delete("groups", groupId);
     }
 
