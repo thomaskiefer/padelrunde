@@ -5,7 +5,7 @@ import {
   createRootRouteWithContext,
 } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
-import { ClerkProvider, useAuth } from "@clerk/tanstack-react-start";
+import { ClerkProvider, useAuth, useUser } from "@clerk/tanstack-react-start";
 import { auth } from "@clerk/tanstack-react-start/server";
 import { convexQuery } from "@convex-dev/react-query";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -20,6 +20,7 @@ import type { ConvexQueryClient } from "@convex-dev/react-query";
 import type { QueryClient } from "@tanstack/react-query";
 import appCss from "~/styles/app.css?url";
 import { AppHeader } from "~/components/AppHeader";
+import { ProfileImageGate } from "~/components/ProfileImageGate";
 import { shouldEnsureCurrentUser } from "~/lib/currentUserSync";
 
 const fetchClerkAuth = createServerFn({ method: "GET" }).handler(async () => {
@@ -46,6 +47,9 @@ export const Route = createRootRouteWithContext<{
       { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Archivo+Black&family=DM+Sans:wght@400;500;600;700&display=swap" },
       { rel: "stylesheet", href: appCss },
       { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
+      { rel: "alternate icon", href: "/favicon.ico" },
+      { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
+      { rel: "manifest", href: "/site.webmanifest" },
     ],
   }),
   beforeLoad: async (ctx) => {
@@ -68,11 +72,26 @@ function RootComponent() {
         <ConvexProviderWithClerk client={convexClient} useAuth={useAuth}>
           <AppHeader />
           <EnsureCurrentUserInBackground />
-          <Outlet />
+          <ProfileImageRouter />
         </ConvexProviderWithClerk>
       </ClerkProvider>
     </RootDocument>
   );
+}
+
+function ProfileImageRouter() {
+  const { isSignedIn } = useAuth();
+  const { user, isLoaded } = useUser();
+
+  if (!isSignedIn || !isLoaded) {
+    return <Outlet />;
+  }
+
+  if (!user?.hasImage) {
+    return <ProfileImageGate />;
+  }
+
+  return <Outlet />;
 }
 
 function EnsureCurrentUserInBackground() {
