@@ -6,8 +6,20 @@ import {
   validateKnockoutScore,
   validateScore,
 } from "./model/validation";
+import type { MutationCtx, QueryCtx } from "./_generated/server";
 
 const KNOCKOUT_PHASES = new Set(["semifinal", "bronze", "final"]);
+
+async function isMatchParticipant(
+  ctx: QueryCtx | MutationCtx,
+  userId: string,
+  memberIds: Array<string>
+) {
+  const members = await Promise.all(
+    memberIds.map((memberId) => ctx.db.get("groupMembers", memberId as any))
+  );
+  return members.some((member) => member?.userId === userId);
+}
 
 export const getByRound = query({
   args: { roundId: v.id("rounds") },
@@ -74,6 +86,14 @@ export const submitScore = mutation({
     if (!tournament) throw new ConvexError("Turnier nicht gefunden");
 
     const { user } = await requireGroupMember(ctx, tournament.groupId);
+
+    const participantIds = [...match.teamA, ...match.teamB] as Array<string>;
+    const isParticipant = await isMatchParticipant(ctx, user._id, participantIds);
+    if (!isParticipant) {
+      throw new ConvexError(
+        "Nur beteiligte Teams können Ergebnisse eintragen"
+      );
+    }
 
     // Check round phase for knockout validation
     const round = await ctx.db.get("rounds", match.roundId);

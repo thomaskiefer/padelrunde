@@ -10,6 +10,8 @@ import { KNOCKOUT_PHASES } from "~/lib/tournament";
 interface MatchData {
   _id: Id<"matches">;
   court: number;
+  teamA: Array<Id<"groupMembers">>;
+  teamB: Array<Id<"groupMembers">>;
   teamANames: Array<string>;
   teamBNames: Array<string>;
   scoreA?: number;
@@ -19,7 +21,13 @@ interface MatchData {
   phase?: string;
 }
 
-export function SpielKarte({ match }: { match: MatchData }) {
+export function SpielKarte({
+  match,
+  canSubmit,
+}: {
+  match: MatchData;
+  canSubmit: boolean;
+}) {
   const submitScore = useMutation(api.matches.submitScore);
   const [scoreA, setScoreA] = useState("");
   const [scoreB, setScoreB] = useState("");
@@ -74,7 +82,7 @@ export function SpielKarte({ match }: { match: MatchData }) {
   const winnerIsB = winnerSide === "B";
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4 space-y-4 hover:border-brand-navy/30 transition-all duration-200 shadow-sm">
+    <div className="rounded-xl border border-gray-100 bg-white p-4 space-y-4 hover:border-brand-navy/30 transition-all duration-200 shadow-sm">
       <div className="flex items-center justify-between border-b border-gray-100 pb-2">
         <span className="text-[10px] uppercase tracking-widest font-bold text-gray-400">
           PLATZ {match.court}
@@ -86,9 +94,7 @@ export function SpielKarte({ match }: { match: MatchData }) {
         ) : (
           <span className="flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-brand-red animate-pulse" aria-hidden="true" />
-            <span className="text-[10px] uppercase tracking-widest font-bold text-brand-red">
-              Live-Eingabe
-            </span>
+            <Badge variant="brandRed" size="xs">Live-Eingabe</Badge>
           </span>
         )}
       </div>
@@ -196,7 +202,7 @@ export function SpielKarte({ match }: { match: MatchData }) {
         </div>
       )}
 
-      {!isCompleted && (
+      {!isCompleted && canSubmit && (
         <Button
           variant={isValid ? "brandNavy" : "brandSubtle"}
           size="touch"
@@ -206,6 +212,14 @@ export function SpielKarte({ match }: { match: MatchData }) {
         >
           {submitting ? "Speichere..." : "Ergebnis eintragen"}
         </Button>
+      )}
+
+      {!isCompleted && !canSubmit && (
+        <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50 px-3 py-2 text-center">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
+            Nur beteiligte Teams können Ergebnisse eintragen
+          </p>
+        </div>
       )}
 
       {error && (

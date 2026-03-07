@@ -89,6 +89,66 @@ async function upsertUser(
   return updated;
 }
 
+async function setupAmericanoTournament(
+  t: ConvexClient,
+  options: { includeSpectator?: boolean } = {}
+) {
+  const owner = await upsertUser(t, "owner", { canCreateGroup: true });
+  const player1 = await upsertUser(t, "player-1");
+  const player2 = await upsertUser(t, "player-2");
+  const player3 = await upsertUser(t, "player-3");
+  const spectator = options.includeSpectator
+    ? await upsertUser(t, "spectator")
+    : null;
+
+  const ownerCtx = t.withIdentity({ subject: "owner" });
+  const groupId = await ownerCtx.mutation(api.groups.create, {
+    name: "Americano Group",
+    slug: `americano-group-${options.includeSpectator ? "spectator" : "base"}`,
+  });
+
+  for (const user of [player1, player2, player3, spectator].filter(Boolean)) {
+    await ownerCtx.mutation(api.groups.addMember, {
+      groupId,
+      userId: (user as Doc<"users">)._id,
+      displayName: (user as Doc<"users">).name,
+    });
+  }
+
+  const members = await ownerCtx.query(api.groups.getMembers, { groupId });
+  const tournamentPlayers = members.filter(
+    (member) => member.userId !== spectator?._id
+  );
+
+  const tournamentId = await ownerCtx.mutation(api.tournaments.create, {
+    groupId,
+    name: "Americano Test",
+    mode: "americano",
+    courts: 1,
+    playerIds: tournamentPlayers.map((member) => member._id),
+  });
+
+  await ownerCtx.mutation(api.rounds.generateRounds, { tournamentId });
+  const rounds = await ownerCtx.query(api.rounds.listByTournament, {
+    tournamentId,
+  });
+  const firstRound = rounds[0] ?? fail("Missing first round");
+  const matches = await ownerCtx.query(api.matches.getByRound, {
+    roundId: firstRound._id,
+  });
+  const firstMatch = matches[0] ?? fail("Missing first match");
+
+  return {
+    owner,
+    ownerCtx,
+    groupId,
+    tournamentId,
+    members,
+    firstMatch,
+    spectator,
+  };
+}
+
 describe("convex integration flows", () => {
   it("can provision the signed-in user without waiting for the Clerk webhook", async () => {
     const t = createTestClient();
@@ -137,6 +197,78 @@ describe("convex integration flows", () => {
     } finally {
       process.env.SUPERADMIN_CLERK_IDS = previousSuperAdminIds;
     }
+  });
+
+  it("lets only participating teams submit match results", async () => {
+    const t = createTestClient();
+    const { firstMatch, spectator } = await setupAmericanoTournament(t, {
+      includeSpectator: true,
+    });
+
+    const participantMember = await t.run((ctx) =>
+      ctx.db.get("groupMembers", firstMatch.teamA[0] as any)
+    );
+    const participantUser = participantMember
+      ? await t.run((ctx) => ctx.db.get("users", participantMember.userId))
+      : null;
+    if (!participantUser || !spectator) fail("Missing participant test users");
+
+    const spectatorCtx = t.withIdentity({ subject: "spectator" });
+    await expect(
+      spectatorCtx.mutation(api.matches.submitScore, {
+        matchId: firstMatch._id,
+        scoreA: 20,
+        scoreB: 12,
+      })
+    ).rejects.toThrow("Nur beteiligte Teams können Ergebnisse eintragen");
+
+    const participantCtx = t.withIdentity({ subject: participantUser.clerkId });
+    await participantCtx.mutation(api.matches.submitScore, {
+      matchId: firstMatch._id,
+      scoreA: 20,
+      scoreB: 12,
+    });
+
+    const updatedMatch = await t.run((ctx) => ctx.db.get("matches", firstMatch._id));
+    expect(updatedMatch?.status).toBe("completed");
+    expect(updatedMatch?.reportedBy).toBe(participantUser._id);
+  });
+
+  it("records edit history when an admin changes an existing result", async () => {
+    const t = createTestClient();
+    const { firstMatch, owner, ownerCtx } = await setupAmericanoTournament(t);
+
+    const participantMember = await t.run((ctx) =>
+      ctx.db.get("groupMembers", firstMatch.teamA[0] as any)
+    );
+    const participantUser = participantMember
+      ? await t.run((ctx) => ctx.db.get("users", participantMember.userId))
+      : null;
+    if (!participantUser) fail("Missing participant");
+
+    const participantCtx = t.withIdentity({ subject: participantUser.clerkId });
+    await participantCtx.mutation(api.matches.submitScore, {
+      matchId: firstMatch._id,
+      scoreA: 20,
+      scoreB: 12,
+    });
+
+    await ownerCtx.mutation(api.matches.adminEditScore, {
+      matchId: firstMatch._id,
+      scoreA: 18,
+      scoreB: 14,
+    });
+
+    const editedMatch = await t.run((ctx) => ctx.db.get("matches", firstMatch._id));
+    expect(editedMatch?.scoreA).toBe(18);
+    expect(editedMatch?.scoreB).toBe(14);
+    expect(editedMatch?.reportedBy).toBe(owner._id);
+    expect(editedMatch?.editHistory).toHaveLength(1);
+    expect(editedMatch?.editHistory?.[0]).toMatchObject({
+      editedBy: owner._id,
+      previousScoreA: 20,
+      previousScoreB: 12,
+    });
   });
 
   it("persists backoffice-promoted super admins across Clerk syncs", async () => {

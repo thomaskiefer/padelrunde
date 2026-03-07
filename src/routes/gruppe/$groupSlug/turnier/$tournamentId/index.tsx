@@ -84,6 +84,14 @@ export function TournamentView() {
   }
 
   const canManage = canManageGroup(me ?? null, members);
+  const viewerTournamentMemberIds = new Set(
+    members
+      .filter(
+        (member) =>
+          member.userId === me?._id && tournament.playerIds.includes(member._id)
+      )
+      .map((member) => member._id)
+  );
 
   const handleStartTournament = async () => {
     setStartError("");
@@ -221,7 +229,11 @@ export function TournamentView() {
             <h3 className="section-title-accent font-display text-sm uppercase tracking-widest text-brand-navy">
               Spiele
             </h3>
-            <RoundsDisplay rounds={rounds} />
+            <RoundsDisplay
+              rounds={rounds}
+              viewerTournamentMemberIds={viewerTournamentMemberIds}
+            />
+            
           </section>
         </div>
       )}
@@ -231,12 +243,14 @@ export function TournamentView() {
 
 function RoundsDisplay({
   rounds,
+  viewerTournamentMemberIds,
 }: {
   rounds: Array<{
     _id: Id<"rounds">;
     roundNumber: number;
     phase: string;
   }>;
+  viewerTournamentMemberIds: Set<Id<"groupMembers">>;
 }) {
   return (
     <div className="space-y-8">
@@ -255,6 +269,7 @@ function RoundsDisplay({
               roundId={round._id}
               title={title}
               isKnockout={isKnockout}
+              viewerTournamentMemberIds={viewerTournamentMemberIds}
             />
           );
         })}
@@ -266,10 +281,12 @@ function RoundSection({
   roundId,
   title,
   isKnockout,
+  viewerTournamentMemberIds,
 }: {
   roundId: Id<"rounds">;
   title: string;
   isKnockout: boolean;
+  viewerTournamentMemberIds: Set<Id<"groupMembers">>;
 }) {
   const { data: matches } = useSuspenseQuery(
     convexQuery(api.matches.getByRound, { roundId })
@@ -290,7 +307,15 @@ function RoundSection({
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
         {matches.map((match) => (
-          <SpielKarte key={match._id} match={match} />
+          <SpielKarte
+            key={match._id}
+            match={match}
+            canSubmit={
+              [...match.teamA, ...match.teamB].some((memberId) =>
+                viewerTournamentMemberIds.has(memberId as Id<"groupMembers">)
+              )
+            }
+          />
         ))}
       </div>
     </div>

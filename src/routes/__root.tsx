@@ -9,6 +9,8 @@ import { ClerkProvider, useAuth } from "@clerk/tanstack-react-start";
 import { auth } from "@clerk/tanstack-react-start/server";
 import { convexQuery } from "@convex-dev/react-query";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Analytics } from "@vercel/analytics/react";
+import { SpeedInsights } from "@vercel/speed-insights/react";
 import { useConvexAuth, useMutation } from "convex/react";
 import { ConvexProviderWithClerk } from "convex/react-clerk";
 import * as React from "react";
@@ -43,6 +45,7 @@ export const Route = createRootRouteWithContext<{
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Archivo+Black&family=DM+Sans:wght@400;500;600;700&display=swap" },
       { rel: "stylesheet", href: appCss },
+      { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
     ],
   }),
   beforeLoad: async (ctx) => {
@@ -143,6 +146,8 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       </head>
       <body className="min-h-screen bg-[#FAFAF9] text-[#1A1A1A] antialiased">
         {children}
+        <Analytics />
+        <SpeedInsights />
         <Scripts />
       </body>
     </html>
