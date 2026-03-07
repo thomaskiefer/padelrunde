@@ -6,6 +6,7 @@ import { useState } from "react";
 import { api } from "../../../convex/_generated/api";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
+import { cn } from "~/lib/utils";
 
 export const Route = createFileRoute("/internal/")({
   component: InternalDashboard,
@@ -115,20 +116,14 @@ function InternalDashboard() {
         </div>
       ) : (
         <>
-          <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm space-y-2">
-            <h3 className="font-display text-sm uppercase tracking-widest text-brand-navy">
-              Benutzerrechte
+          <section className="space-y-4">
+            <h3 className="section-title-accent font-display text-sm uppercase tracking-widest text-brand-navy">
+              Benutzer ({users.length})
             </h3>
             <p className="text-sm text-gray-500">
               Lege fest, wer Backoffice-Zugriff hat und wer neue Gruppen anlegen darf. Benutzer mit dem Badge
               <span className="font-semibold text-brand-navy"> Env</span> werden außerhalb dieser Seite verwaltet.
             </p>
-          </div>
-
-          <section className="space-y-4">
-            <h3 className="section-title-accent font-display text-sm uppercase tracking-widest text-brand-navy">
-              Benutzer ({users.length})
-            </h3>
 
             <div className="hidden md:block overflow-x-auto bg-white rounded-xl border border-gray-100 shadow-sm">
               <table className="w-full text-left border-collapse">
@@ -142,9 +137,14 @@ function InternalDashboard() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
-                  {users.map((user) => (
-                    <tr key={user._id} className="hover:bg-gray-50/50 transition-colors">
-                      <td className="px-4 py-4 text-sm font-semibold text-brand-navy">{user.name}</td>
+                  {users.map((user) => {
+                    const isMe = user._id === me._id;
+                    return (
+                    <tr key={user._id} className={cn("hover:bg-gray-50/50 transition-colors", isMe && "bg-brand-navy/[0.03]")}>
+                      <td className="px-4 py-4 text-sm font-semibold text-brand-navy">
+                        {user.name}
+                        {isMe && <span className="ml-2 text-[10px] uppercase tracking-widest font-bold text-gray-400">(Du)</span>}
+                      </td>
                       <td className="px-4 py-4 text-sm text-gray-500">{user.email}</td>
                       <td className="px-4 py-4">
                         <div className="flex gap-1.5 flex-wrap">
@@ -201,17 +201,23 @@ function InternalDashboard() {
                         </div>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
 
             <div className="grid gap-4 md:hidden">
-              {users.map((user) => (
-                <div key={user._id} className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm space-y-4">
+              {users.map((user) => {
+                const isMe = user._id === me._id;
+                return (
+                <div key={user._id} className={cn("bg-white p-4 rounded-xl border border-gray-100 shadow-sm space-y-4", isMe && "ring-2 ring-brand-navy/10")}>
                   <div className="flex justify-between items-start gap-2">
                     <div className="min-w-0">
-                      <p className="font-bold text-brand-navy truncate">{user.name}</p>
+                      <p className="font-bold text-brand-navy truncate">
+                        {user.name}
+                        {isMe && <span className="ml-1.5 text-[10px] uppercase tracking-widest font-bold text-gray-400">(Du)</span>}
+                      </p>
                       <p className="text-xs text-gray-400 truncate">{user.email}</p>
                     </div>
                     <div className="flex shrink-0 gap-2">
@@ -267,7 +273,8 @@ function InternalDashboard() {
                     )}
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </section>
 
@@ -319,7 +326,7 @@ function InternalDashboard() {
                     </div>
 
                     <div className="space-y-2">
-                      <p className="text-[10px] uppercase tracking-widest text-gray-400">
+                      <p className="text-[10px] uppercase tracking-widest font-bold text-gray-400">
                         Historische Mitgliedschaften
                       </p>
                       <div className="flex flex-wrap gap-2">

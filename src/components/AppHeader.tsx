@@ -101,31 +101,33 @@ function UserMenu() {
         )}
       </button>
       {open && (
-        <div role="menu" id="user-menu" className="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl shadow-xl border border-gray-200 py-1 z-50 animate-scale-in">
+        <div role="menu" id="user-menu" className="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl shadow-xl border border-gray-100 py-1 z-50 animate-scale-in">
           <div className="px-3 py-2 border-b border-gray-100">
             <p className="text-sm font-medium text-gray-900 truncate">
               {user?.fullName ?? user?.emailAddresses[0]?.emailAddress}
             </p>
           </div>
-          <button
+          <Button
+            variant="ghost"
             role="menuitem"
             tabIndex={-1}
             onClick={() => {
               setOpen(false);
               openUserProfile();
             }}
-            className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 focus-visible:bg-gray-50 focus-visible:outline-hidden focus-visible:ring-[3px] focus-visible:ring-brand-navy/50 transition-colors min-h-[44px]"
+            className="w-full text-left justify-start px-3 py-2 text-sm text-gray-700 rounded-none focus-visible:ring-brand-navy/50 min-h-[44px]"
           >
             Profil bearbeiten
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="ghost"
             role="menuitem"
             tabIndex={-1}
             onClick={() => signOut()}
-            className="w-full text-left px-3 py-2 text-sm text-brand-red hover:bg-gray-50 focus-visible:bg-gray-50 focus-visible:outline-hidden focus-visible:ring-[3px] focus-visible:ring-brand-navy/50 transition-colors min-h-[44px]"
+            className="w-full text-left justify-start px-3 py-2 text-sm text-brand-red rounded-none focus-visible:ring-brand-navy/50 min-h-[44px]"
           >
             Abmelden
-          </button>
+          </Button>
         </div>
       )}
     </div>

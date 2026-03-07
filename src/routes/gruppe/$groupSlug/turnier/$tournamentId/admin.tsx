@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { api } from "../../../../../../convex/_generated/api";
 import { resolveTournamentAdminAccess } from "../../-access";
 import type { Id } from "../../../../../../convex/_generated/dataModel";
+import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { cn } from "~/lib/utils";
 import { KNOCKOUT_PHASES, phaseLabels } from "~/lib/tournament";
@@ -152,7 +153,7 @@ export function TournamentAdmin() {
       </div>
 
       <div className="bg-gradient-to-br from-brand-navy to-[#142a47] text-white rounded-xl p-4 sm:p-6 shadow-lg">
-        <h3 className="section-title-accent font-display uppercase tracking-wide text-sm sm:text-base text-white mb-4">
+        <h3 className="section-title-accent font-display uppercase tracking-widest text-sm text-white mb-4">
           Turnier-Status
         </h3>
         <div className="flex flex-wrap gap-2">
@@ -264,7 +265,7 @@ function AdminRoundSection({
     <div className="border-b border-gray-200 pb-6">
       <h3
         className={cn(
-          "font-display uppercase text-base tracking-wide mb-4",
+          "section-title-accent font-display text-sm uppercase tracking-widest mb-4",
           isKnockout ? "text-brand-red" : "text-brand-navy"
         )}
       >
@@ -348,7 +349,7 @@ function AdminMatchRow({
       <div className="flex items-center justify-between text-[10px] uppercase tracking-widest font-bold text-gray-400 border-b border-gray-50 pb-2">
         <span>Admin-Bearbeitung</span>
         {match.status === "completed" && (
-          <span className="text-brand-teal">Abgeschlossen</span>
+          <Badge variant="brandTeal" size="xs">Abgeschlossen</Badge>
         )}
       </div>
 
@@ -426,7 +427,11 @@ function AdminMatchRow({
         {saving ? "Speichere..." : "Ergebnis überschreiben"}
       </Button>
 
-      {error && <p className="text-[10px] font-bold text-red-600 uppercase text-center" role="alert">{error}</p>}
+      {error && (
+        <div className="bg-red-50 border-l-2 border-red-500 p-3" role="alert">
+          <p className="text-[10px] font-bold text-red-700 uppercase tracking-wider">{error}</p>
+        </div>
+      )}
     </div>
   );
 }

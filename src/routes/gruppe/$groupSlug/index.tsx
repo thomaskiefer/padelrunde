@@ -37,7 +37,7 @@ function GroupDashboard() {
 
   if (!group) {
     return (
-      <div className="mx-auto max-w-4xl p-4 mt-12 text-center animate-fade-in-up">
+      <div className="mx-auto max-w-5xl p-4 mt-12 text-center animate-fade-in-up">
         <h2 className="font-display text-xl uppercase text-brand-navy mb-2">Gruppe nicht gefunden</h2>
         <p className="text-gray-500 text-sm mb-4">Diese Gruppe existiert nicht oder wurde gelöscht.</p>
         <Link to="/" className="text-[10px] uppercase tracking-[0.2em] font-bold text-gray-400 hover:text-brand-red transition-colors flex items-center gap-1.5"><span className="text-lg leading-none" aria-hidden="true">←</span> Startseite</Link>
@@ -103,14 +103,11 @@ function GroupMembers({
       </p>
       <div className="flex flex-wrap gap-2">
         {members.map((m) => (
-          <span
+          <Badge
             key={m._id}
-            className={cn(
-              "max-w-[180px] truncate flex items-center gap-1.5 text-[10px] px-3 py-1.5 rounded font-bold uppercase tracking-wide border",
-              m.role === "admin"
-                ? "bg-brand-red/10 text-brand-red border-brand-red/20"
-                : "bg-brand-navy/5 text-brand-navy border-brand-navy/10"
-            )}
+            variant={m.role === "admin" ? "brandRed" : "muted"}
+            size="xs"
+            className="max-w-[180px] truncate gap-1.5"
           >
             {m.displayName}
             {m.role === "admin" && (
@@ -118,7 +115,7 @@ function GroupMembers({
                 Admin
               </Badge>
             )}
-          </span>
+          </Badge>
         ))}
       </div>
     </section>
@@ -162,7 +159,7 @@ function TournamentList({
             key={t._id}
             to="/gruppe/$groupSlug/turnier/$tournamentId"
             params={{ groupSlug, tournamentId: t._id }}
-            className="animate-fade-in-up group bg-white relative overflow-hidden rounded-xl border border-gray-100 p-5 hover:border-brand-navy/20 transition-all duration-300 hover:shadow-xl hover:-translate-y-1 active:scale-[0.98] block motion-reduce:translate-y-0 motion-reduce:scale-100 motion-reduce:transition-none focus-visible:ring-[3px] focus-visible:ring-brand-navy/50 focus-visible:outline-hidden"
+            className="animate-fade-in-up group bg-white relative overflow-hidden rounded-xl border border-gray-100 shadow-sm p-5 hover:border-brand-navy/20 transition-all duration-300 hover:shadow-xl hover:-translate-y-1 active:scale-[0.98] block motion-reduce:translate-y-0 motion-reduce:scale-100 motion-reduce:transition-none focus-visible:ring-[3px] focus-visible:ring-brand-navy/50 focus-visible:outline-hidden"
             style={{ animationDelay: `${Math.min(i * 0.05, 0.3)}s` }}
           >
             <div className={cn(

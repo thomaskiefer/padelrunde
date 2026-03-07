@@ -33,7 +33,7 @@ const buttonVariants = cva(
         brandGhost:
           "bg-white/20 hover:bg-white/30 text-white",
         brandSubtle:
-          "bg-gray-100 text-gray-400",
+          "bg-gray-100 text-gray-400 cursor-not-allowed",
       },
       size: {
         default: "h-9 px-4 py-2 has-[>svg]:px-3",

@@ -31,7 +31,8 @@ export function PartnerStats({ tournamentId }: Props) {
             )}
           >
             <button
-              className="w-full min-h-[44px] p-4 flex items-center justify-between gap-3 text-left group focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-brand-navy/50 focus-visible:ring-inset rounded-xl"
+              type="button"
+              className="w-full min-h-[44px] p-4 flex items-center justify-between gap-3 text-left group focus-visible:ring-[3px] focus-visible:ring-brand-navy/50 focus-visible:ring-inset rounded-xl"
               aria-expanded={isExpanded}
               aria-label={`Statistik für ${player.displayName}`}
               aria-controls={`stats-${player.playerId}`}
@@ -113,4 +114,3 @@ export function PartnerStats({ tournamentId }: Props) {
     </div>
   );
 }
-
