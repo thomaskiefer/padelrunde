@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 interface ImageCropperProps {
   imageFile: File;
@@ -103,16 +103,16 @@ export function ImageCropper({ imageFile, onCrop, onCancel }: ImageCropperProps)
       if (e.touches.length === 1) {
         d.active = true;
         d.isPinch = false;
-        d.lastX = e.touches[0]!.clientX;
-        d.lastY = e.touches[0]!.clientY;
+        d.lastX = e.touches[0].clientX;
+        d.lastY = e.touches[0].clientY;
       } else if (e.touches.length === 2) {
         d.active = true;
         d.isPinch = true;
-        const dx = e.touches[0]!.clientX - e.touches[1]!.clientX;
-        const dy = e.touches[0]!.clientY - e.touches[1]!.clientY;
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
         d.pinchDist = Math.hypot(dx, dy);
-        d.lastX = (e.touches[0]!.clientX + e.touches[1]!.clientX) / 2;
-        d.lastY = (e.touches[0]!.clientY + e.touches[1]!.clientY) / 2;
+        d.lastX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+        d.lastY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
       }
     }
 
@@ -124,19 +124,19 @@ export function ImageCropper({ imageFile, onCrop, onCancel }: ImageCropperProps)
       if (!d.active) return;
 
       if (e.touches.length === 1 && !d.isPinch) {
-        const dx = e.touches[0]!.clientX - d.lastX;
-        const dy = e.touches[0]!.clientY - d.lastY;
-        d.lastX = e.touches[0]!.clientX;
-        d.lastY = e.touches[0]!.clientY;
+        const dx = e.touches[0].clientX - d.lastX;
+        const dy = e.touches[0].clientY - d.lastY;
+        d.lastX = e.touches[0].clientX;
+        d.lastY = e.touches[0].clientY;
         const np = clampPan({ x: cur.pan.x + dx, y: cur.pan.y + dy }, cur.zoom);
         L.current.pan = np;
         setPan(np);
       } else if (e.touches.length === 2 && d.pinchDist > 0) {
-        const dx = e.touches[0]!.clientX - e.touches[1]!.clientX;
-        const dy = e.touches[0]!.clientY - e.touches[1]!.clientY;
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
         const dist = Math.hypot(dx, dy);
-        const cx = (e.touches[0]!.clientX + e.touches[1]!.clientX) / 2;
-        const cy = (e.touches[0]!.clientY + e.touches[1]!.clientY) / 2;
+        const cx = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+        const cy = (e.touches[0].clientY + e.touches[1].clientY) / 2;
         const scale = dist / d.pinchDist;
         const nz = Math.max(1, Math.min(5, cur.zoom * scale));
         const vw2 = window.innerWidth / 2;
@@ -161,8 +161,8 @@ export function ImageCropper({ imageFile, onCrop, onCancel }: ImageCropperProps)
         drag.current.isPinch = false;
       } else if (e.touches.length === 1) {
         drag.current.isPinch = false;
-        drag.current.lastX = e.touches[0]!.clientX;
-        drag.current.lastY = e.touches[0]!.clientY;
+        drag.current.lastX = e.touches[0].clientX;
+        drag.current.lastY = e.touches[0].clientY;
       }
     }
 

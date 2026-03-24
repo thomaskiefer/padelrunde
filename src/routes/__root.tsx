@@ -22,6 +22,7 @@ import appCss from "~/styles/app.css?url";
 import { AppHeader } from "~/components/AppHeader";
 import { ProfileImageGate } from "~/components/ProfileImageGate";
 import { shouldEnsureCurrentUser } from "~/lib/currentUserSync";
+import { shouldShowProfileImageGate } from "~/lib/profileImageGate";
 
 const fetchClerkAuth = createServerFn({ method: "GET" }).handler(async () => {
   const authState = await auth();
@@ -83,11 +84,13 @@ function ProfileImageRouter() {
   const { isSignedIn } = useAuth();
   const { user, isLoaded } = useUser();
 
-  if (!isSignedIn || !isLoaded) {
-    return <Outlet />;
-  }
-
-  if (!user?.hasImage) {
+  if (
+    shouldShowProfileImageGate({
+      isSignedIn: !!isSignedIn,
+      isClerkLoaded: !!isLoaded,
+      hasImage: !!user?.hasImage,
+    })
+  ) {
     return <ProfileImageGate />;
   }
 

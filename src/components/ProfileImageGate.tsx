@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useUser } from "@clerk/tanstack-react-start";
 import { ImageCropper } from "./ImageCropper";
 import { Button } from "~/components/ui/button";
