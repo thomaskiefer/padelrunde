@@ -123,9 +123,9 @@ export function CreateTournament() {
         <Link
           to="/gruppe/$groupSlug"
           params={{ groupSlug }}
-          className="text-[10px] uppercase tracking-[0.2em] font-bold text-gray-400 hover:text-brand-red transition-colors flex items-center gap-1.5"
+          className="text-[10px] uppercase tracking-[0.2em] font-bold text-gray-400 hover:text-brand-red transition-colors inline-flex items-center gap-1.5"
         >
-          <span className="text-lg leading-none" aria-hidden="true">&larr;</span> {groupSlug}
+          <span className="text-lg leading-none" aria-hidden="true">&larr;</span> Zur Gruppe
         </Link>
         <h2 className="font-display text-2xl sm:text-3xl uppercase text-brand-navy">
           Neues Turnier

@@ -124,15 +124,12 @@ function GroupList() {
                 <div className="absolute top-0 right-0 w-16 h-16 -mr-8 -mt-8 bg-gray-50 rotate-45 group-hover:bg-brand-red/5 transition-colors" aria-hidden="true" />
 
                 <div className="relative z-10">
-                  <div className="flex items-center gap-2 mb-1">
+                  <div className="flex items-center gap-2 mb-2">
                     <span className="w-1.5 h-1.5 rounded-full bg-brand-red group-hover:scale-150 transition-transform" aria-hidden="true" />
-                    <p className="text-[10px] uppercase tracking-[0.2em] font-bold text-gray-400">Padel-Gruppe</p>
+                    <p className="text-[10px] uppercase tracking-[0.2em] font-bold text-gray-400">Gruppe</p>
                   </div>
-                  <p className="text-lg sm:text-xl font-display uppercase text-brand-navy group-hover:text-brand-red transition-colors truncate">
+                  <p className="text-lg sm:text-xl font-display uppercase text-brand-navy group-hover:text-brand-red transition-colors leading-tight">
                     {group.name}
-                  </p>
-                  <p className="text-[11px] font-bold text-gray-300 mt-2 uppercase tracking-widest">
-                    /{group.slug}
                   </p>
                 </div>
               </Link>

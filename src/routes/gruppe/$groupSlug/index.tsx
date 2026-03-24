@@ -80,17 +80,21 @@ function GroupDashboard() {
 
   return (
     <div className="mx-auto max-w-5xl p-4 space-y-8 animate-fade-in-up">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0">
-          <h2 className="font-display text-xl sm:text-2xl md:text-3xl uppercase text-brand-navy truncate">
-            {group.name}
-          </h2>
-          <p className="text-sm text-gray-400">
-            /{group.slug}
-          </p>
-        </div>
+      {/* Page header */}
+      <div className="space-y-4">
+        <Link
+          to="/"
+          className="text-[10px] uppercase tracking-[0.2em] font-bold text-gray-400 hover:text-brand-red transition-colors inline-flex items-center gap-1.5"
+        >
+          <span className="text-lg leading-none" aria-hidden="true">&larr;</span> Meine Gruppen
+        </Link>
+        <h2 className="font-display text-2xl sm:text-3xl md:text-4xl uppercase text-brand-navy leading-tight">
+          {group.name}
+        </h2>
+
+        {/* Action row */}
         {!membersLoading && (canManage || currentMembership) && (
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-3 pt-1">
             {canManage && (
               <>
                 <Button variant="brand" size="touchLg" asChild>
@@ -111,32 +115,27 @@ function GroupDashboard() {
                 </Button>
               </>
             )}
-            {currentMembership && (
-              <>
-                <Button
-                  variant="brandDestructive"
-                  size="touchLg"
-                  onClick={handleLeaveGroup}
-                  disabled={isLeavingGroup || Boolean(leaveGroupBlockReason)}
-                >
-                  {leaveGroupBlockReason === "referenced"
-                    ? "Im Turnier gebunden"
-                    : isLeavingGroup
-                      ? "Verlässt..."
-                      : "Gruppe verlassen"}
-                </Button>
-                {leaveGroupBlockReason && (
-                  <p className="basis-full text-xs text-gray-500">
-                    {leaveGroupBlockReason === "referenced"
-                      ? "Du bist in Turnieren dieser Gruppe enthalten und kannst die Gruppe deshalb nicht verlassen."
-                      : leaveGroupBlockReason === "last-member"
-                        ? "Das letzte aktive Mitglied kann die Gruppe nicht verlassen."
-                        : "Mindestens ein Admin muss in der Gruppe bleiben."}
-                  </p>
-                )}
-              </>
+            {currentMembership && !canManage && (
+              <button
+                type="button"
+                onClick={handleLeaveGroup}
+                disabled={isLeavingGroup || Boolean(leaveGroupBlockReason)}
+                className="text-[10px] uppercase tracking-[0.2em] font-bold text-gray-400 hover:text-brand-red transition-colors disabled:opacity-50 disabled:hover:text-gray-400 min-h-[44px] px-2"
+              >
+                {isLeavingGroup ? "Verlässt..." : "Gruppe verlassen"}
+              </button>
             )}
           </div>
+        )}
+
+        {leaveGroupBlockReason && (
+          <p className="text-xs text-gray-400 leading-relaxed">
+            {leaveGroupBlockReason === "referenced"
+              ? "Du bist in Turnieren dieser Gruppe enthalten und kannst die Gruppe deshalb nicht verlassen."
+              : leaveGroupBlockReason === "last-member"
+                ? "Du bist das letzte aktive Mitglied."
+                : "Mindestens ein Admin muss in der Gruppe bleiben."}
+          </p>
         )}
       </div>
 
@@ -161,6 +160,7 @@ function GroupMembers({
     _id: string;
     role: "admin" | "member";
     displayName: string;
+    avatarUrl?: string;
   }>;
 }) {
   return (
@@ -170,17 +170,34 @@ function GroupMembers({
       </p>
       <div className="flex flex-wrap gap-2">
         {members.map((m) => (
-          <Badge
+          <div
             key={m._id}
-            variant={m.role === "admin" ? "brandRed" : "muted"}
-            size="xs"
-            className="max-w-[180px] truncate gap-1.5"
+            className={cn(
+              "inline-flex items-center gap-2 rounded-full px-1 pr-3 py-1 text-[10px] tracking-widest font-bold uppercase",
+              m.role === "admin"
+                ? "bg-brand-red text-white"
+                : "bg-gray-50 border border-gray-200 text-gray-500"
+            )}
           >
+            {m.avatarUrl ? (
+              <img
+                src={m.avatarUrl}
+                alt=""
+                className="w-6 h-6 rounded-full object-cover"
+              />
+            ) : (
+              <span className={cn(
+                "w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold",
+                m.role === "admin" ? "bg-white/20" : "bg-gray-200 text-gray-400"
+              )}>
+                {m.displayName[0].toUpperCase()}
+              </span>
+            )}
             {m.displayName}
             {m.role === "admin" && (
-              <span className="ml-1 opacity-70">Admin</span>
+              <span className="opacity-70">Admin</span>
             )}
-          </Badge>
+          </div>
         ))}
       </div>
     </section>
