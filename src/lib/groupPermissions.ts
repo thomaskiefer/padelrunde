@@ -6,8 +6,10 @@ type Viewer = {
 } | null | undefined;
 
 type GroupMember = {
+  _id?: string;
   userId: string;
   role: "admin" | "member";
+  isReferenced?: boolean;
 };
 
 export function canManageGroup(viewer: Viewer, members: Array<GroupMember>): boolean {
@@ -30,4 +32,23 @@ export function canDemoteAdmin(
 ): boolean {
   if (member.role !== "admin") return true;
   return members.filter((candidate) => candidate.role === "admin").length > 1;
+}
+
+export function canRemoveGroupMember(
+  members: Array<GroupMember>,
+  member: GroupMember
+): boolean {
+  return getRemoveGroupMemberBlockReason(members, member) === null;
+}
+
+export function getRemoveGroupMemberBlockReason(
+  members: Array<GroupMember>,
+  member: GroupMember
+): "referenced" | "last-member" | "last-admin" | null {
+  if (member.isReferenced) return "referenced";
+  if (members.length <= 1) return "last-member";
+  if (member.role !== "admin") return null;
+  return members.filter((candidate) => candidate.role === "admin").length > 1
+    ? null
+    : "last-admin";
 }

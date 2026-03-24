@@ -1,8 +1,13 @@
-import { Link, createFileRoute } from "@tanstack/react-router";
+import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useSuspenseQuery } from "@tanstack/react-query";
 import { convexQuery } from "@convex-dev/react-query";
+import { useMutation } from "convex/react";
+import { useState } from "react";
 import { api } from "../../../../convex/_generated/api";
-import { canManageGroup } from "~/lib/groupPermissions";
+import {
+  canManageGroup,
+  getRemoveGroupMemberBlockReason,
+} from "~/lib/groupPermissions";
 import { Button } from "~/components/ui/button";
 import { Badge } from "~/components/ui/badge";
 import { cn } from "~/lib/utils";
@@ -24,10 +29,14 @@ const modeBadgeVariant: Record<string, "brandNavy" | "brandTeal"> = {
 
 function GroupDashboard() {
   const { groupSlug } = Route.useParams();
+  const navigate = useNavigate();
   const { data: me } = useSuspenseQuery(convexQuery(api.users.me, {}));
   const { data: group } = useSuspenseQuery(
     convexQuery(api.groups.getBySlug, { slug: groupSlug })
   );
+  const leaveGroup = useMutation(api.groups.leaveGroup);
+  const [actionError, setActionError] = useState("");
+  const [isLeavingGroup, setIsLeavingGroup] = useState(false);
   const { data: members = [], isLoading: membersLoading } = useQuery({
     ...convexQuery(api.groups.getMembers, {
       groupId: (group?._id ?? "missing") as any,
@@ -46,6 +55,28 @@ function GroupDashboard() {
   }
 
   const canManage = canManageGroup(me ?? null, members);
+  const currentMembership = me
+    ? members.find((member) => member.userId === me._id)
+    : null;
+  const leaveGroupBlockReason = currentMembership
+    ? getRemoveGroupMemberBlockReason(members, currentMembership)
+    : null;
+
+  const handleLeaveGroup = async () => {
+    if (!window.confirm("Willst du diese Gruppe wirklich verlassen?")) {
+      return;
+    }
+    setActionError("");
+    setIsLeavingGroup(true);
+    try {
+      await leaveGroup({ groupId: group._id });
+      navigate({ to: "/" });
+    } catch (err: any) {
+      setActionError(err.message ?? "Gruppe konnte nicht verlassen werden");
+    } finally {
+      setIsLeavingGroup(false);
+    }
+  };
 
   return (
     <div className="mx-auto max-w-5xl p-4 space-y-8 animate-fade-in-up">
@@ -58,27 +89,64 @@ function GroupDashboard() {
             /{group.slug}
           </p>
         </div>
-        {!membersLoading && canManage && (
+        {!membersLoading && (canManage || currentMembership) && (
           <div className="flex flex-wrap gap-2">
-            <Button variant="brand" size="touchLg" asChild>
-              <Link
-                to="/gruppe/$groupSlug/turnier/neu"
-                params={{ groupSlug }}
-              >
-                Neues Turnier
-              </Link>
-            </Button>
-            <Button variant="brandOutline" size="touchLg" asChild>
-              <Link
-                to="/gruppe/$groupSlug/einstellungen"
-                params={{ groupSlug }}
-              >
-                Einstellungen
-              </Link>
-            </Button>
+            {canManage && (
+              <>
+                <Button variant="brand" size="touchLg" asChild>
+                  <Link
+                    to="/gruppe/$groupSlug/turnier/neu"
+                    params={{ groupSlug }}
+                  >
+                    Neues Turnier
+                  </Link>
+                </Button>
+                <Button variant="brandOutline" size="touchLg" asChild>
+                  <Link
+                    to="/gruppe/$groupSlug/einstellungen"
+                    params={{ groupSlug }}
+                  >
+                    Einstellungen
+                  </Link>
+                </Button>
+              </>
+            )}
+            {currentMembership && (
+              <>
+                <Button
+                  variant="brandDestructive"
+                  size="touchLg"
+                  onClick={handleLeaveGroup}
+                  disabled={isLeavingGroup || Boolean(leaveGroupBlockReason)}
+                >
+                  {leaveGroupBlockReason === "referenced"
+                    ? "Im Turnier gebunden"
+                    : isLeavingGroup
+                      ? "Verlässt..."
+                      : "Gruppe verlassen"}
+                </Button>
+                {leaveGroupBlockReason && (
+                  <p className="basis-full text-xs text-gray-500">
+                    {leaveGroupBlockReason === "referenced"
+                      ? "Du bist in Turnieren dieser Gruppe enthalten und kannst die Gruppe deshalb nicht verlassen."
+                      : leaveGroupBlockReason === "last-member"
+                        ? "Das letzte aktive Mitglied kann die Gruppe nicht verlassen."
+                        : "Mindestens ein Admin muss in der Gruppe bleiben."}
+                  </p>
+                )}
+              </>
+            )}
           </div>
         )}
       </div>
+
+      {actionError && (
+        <div className="bg-red-50 border-l-2 border-red-500 p-3" role="alert">
+          <p className="text-[10px] font-bold text-red-700 uppercase tracking-widest">
+            {actionError}
+          </p>
+        </div>
+      )}
 
       <GroupMembers members={members} />
       <TournamentList groupId={group._id} groupSlug={groupSlug} />

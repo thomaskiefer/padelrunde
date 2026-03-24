@@ -1,10 +1,9 @@
 import { ConvexError, v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
 import {
   requireAuth,
   requireGroupAdmin,
   requireGroupMember,
-  requireSuperAdmin,
 } from "./helpers";
 import {
   validateAddMemberState,
@@ -67,13 +66,105 @@ async function listActiveMembers(
   ctx: QueryCtx | MutationCtx,
   groupId: Id<"groups">
 ) {
+  const referencedMemberIds = await listReferencedMembershipIds(ctx, groupId);
   const memberships = await getMembershipsWithUsers(ctx, groupId);
   return memberships
     .filter((entry) => entry.user)
     .map(({ member, user }) => ({
       ...member,
       avatarUrl: user!.avatarUrl,
+      isReferenced: referencedMemberIds.has(member._id),
     }));
+}
+
+async function listActiveMembershipEntries(
+  ctx: QueryCtx | MutationCtx,
+  groupId: Id<"groups">
+) {
+  const memberships = await getMembershipsWithUsers(ctx, groupId);
+  return memberships.filter(
+    (
+      entry
+    ): entry is {
+      member: Awaited<ReturnType<typeof getMembershipsWithUsers>>[number]["member"];
+      user: NonNullable<
+        Awaited<ReturnType<typeof getMembershipsWithUsers>>[number]["user"]
+      >;
+    } => Boolean(entry.user)
+  );
+}
+
+async function listActiveAdminMemberIds(
+  ctx: QueryCtx | MutationCtx,
+  groupId: Id<"groups">
+) {
+  const activeMemberships = await listActiveMembershipEntries(ctx, groupId);
+  return activeMemberships
+    .filter(({ member }) => member.role === "admin")
+    .map(({ member }) => member._id);
+}
+
+async function maybeResetCreatedGroupFlag(
+  ctx: MutationCtx,
+  userId: Id<"users">
+) {
+  const user = await ctx.db.get("users", userId);
+  if (!user || user.isSuperAdmin || !user.hasCreatedGroup) {
+    return;
+  }
+
+  const remainingGroups = await ctx.db
+    .query("groups")
+    .withIndex("by_creator", (q) => q.eq("createdBy", userId))
+    .collect();
+
+  if (remainingGroups.length === 0) {
+    await ctx.db.patch("users", userId, { hasCreatedGroup: false });
+  }
+}
+
+async function isMembershipReferenced(
+  ctx: QueryCtx | MutationCtx,
+  groupId: Id<"groups">,
+  memberId: Id<"groupMembers">
+) {
+  const referencedMemberIds = await listReferencedMembershipIds(ctx, groupId);
+  return referencedMemberIds.has(memberId);
+}
+
+async function listReferencedMembershipIds(
+  ctx: QueryCtx | MutationCtx,
+  groupId: Id<"groups">
+) {
+  const referencedMemberIds = new Set<Id<"groupMembers">>();
+  const tournaments = await ctx.db
+    .query("tournaments")
+    .withIndex("by_group", (q) => q.eq("groupId", groupId))
+    .collect();
+
+  for (const tournament of tournaments) {
+    for (const playerId of tournament.playerIds) {
+      referencedMemberIds.add(playerId);
+    }
+  }
+
+  for (const tournament of tournaments) {
+    const matches = await ctx.db
+      .query("matches")
+      .withIndex("by_tournament", (q) => q.eq("tournamentId", tournament._id))
+      .collect();
+
+    for (const match of matches) {
+      for (const playerId of match.teamA) {
+        referencedMemberIds.add(playerId);
+      }
+      for (const playerId of match.teamB) {
+        referencedMemberIds.add(playerId);
+      }
+    }
+  }
+
+  return referencedMemberIds;
 }
 
 async function hasActiveMembers(
@@ -237,24 +328,6 @@ export const getMembers = query({
   },
 });
 
-export const listAddableUsers = query({
-  args: { groupId: v.id("groups") },
-  handler: async (ctx, { groupId }) => {
-    await requireSuperAdmin(ctx);
-
-    const existingMembers = await ctx.db
-      .query("groupMembers")
-      .withIndex("by_group", (q) => q.eq("groupId", groupId))
-      .collect();
-    const existingUserIds = new Set(existingMembers.map((member) => member.userId));
-    const users = await ctx.db.query("users").collect();
-
-    return users
-      .filter((user) => !existingUserIds.has(user._id))
-      .sort((a, b) => a.name.localeCompare(b.name, "de"));
-  },
-});
-
 export const listOrphanedForBackoffice = query({
   args: {},
   handler: async (ctx) => {
@@ -306,6 +379,7 @@ export const deleteOrphanedGroup = mutation({
     }
 
     await deleteGroupTree(ctx, groupId);
+    await maybeResetCreatedGroupFlag(ctx, group.createdBy);
   },
 });
 
@@ -369,7 +443,14 @@ export const listInviteTokens = query({
 
     return invites
       .map((invite) => ({
-        ...invite,
+        _id: invite._id,
+        groupId: invite.groupId,
+        token:
+          getInviteStatus(invite) === "active" ? invite.token ?? null : null,
+        label: invite.label,
+        createdAt: invite.createdAt,
+        expiresAt: invite.expiresAt,
+        revokedAt: invite.revokedAt,
         status: getInviteStatus(invite),
       }))
       .sort((a, b) => b.createdAt - a.createdAt);
@@ -553,7 +634,107 @@ export const joinWithInvite = mutation({
   },
 });
 
-export const addMember = mutation({
+export const leaveGroup = mutation({
+  args: { groupId: v.id("groups") },
+  handler: async (ctx, { groupId }) => {
+    if (!(await hasActiveMembers(ctx, groupId))) {
+      throw new ConvexError("Gruppe nicht gefunden");
+    }
+
+    const user = await requireAuth(ctx);
+    const membership = await findMembership(ctx, groupId, user._id);
+    if (!membership) {
+      throw new ConvexError("Kein Mitglied dieser Gruppe");
+    }
+
+    const activeMemberships = await listActiveMembershipEntries(ctx, groupId);
+    if (activeMemberships.length <= 1) {
+      throw new ConvexError(
+        "Letztes aktive Mitglied kann die Gruppe nicht verlassen. Lösche die Gruppe stattdessen"
+      );
+    }
+
+    const activeAdminMemberIds = activeMemberships
+      .filter(({ member }) => member.role === "admin")
+      .map(({ member }) => member._id);
+
+    const roleChangeValidation = validateRoleChangeState({
+      currentRole: membership.role,
+      nextRole: "member",
+      targetMemberId: membership._id,
+      activeAdminMemberIds,
+    });
+    if (!roleChangeValidation.valid) {
+      throw new ConvexError(roleChangeValidation.error);
+    }
+
+    if (await isMembershipReferenced(ctx, groupId, membership._id)) {
+      throw new ConvexError(
+        "Mitglied ist in Turnieren dieser Gruppe enthalten und kann nicht entfernt werden"
+      );
+    }
+
+    await ctx.db.delete("groupMembers", membership._id);
+  },
+});
+
+export const removeMember = mutation({
+  args: { memberId: v.id("groupMembers") },
+  handler: async (ctx, { memberId }) => {
+    const member = await ctx.db.get("groupMembers", memberId);
+    if (!member) throw new ConvexError("Mitglied nicht gefunden");
+
+    const actingUser = await requireGroupAdmin(ctx, member.groupId);
+    if (actingUser._id === member.userId) {
+      throw new ConvexError("Verlasse die Gruppe über die eigene Aktion");
+    }
+
+    const activeMemberships = await listActiveMembershipEntries(ctx, member.groupId);
+    const isActiveMember = activeMemberships.some(
+      ({ member: activeMember }) => activeMember._id === member._id
+    );
+
+    if (isActiveMember && activeMemberships.length <= 1) {
+      throw new ConvexError(
+        "Letztes aktive Mitglied kann nicht entfernt werden. Lösche die Gruppe stattdessen"
+      );
+    }
+
+    const activeAdminMemberIds = await listActiveAdminMemberIds(ctx, member.groupId);
+    const roleChangeValidation = validateRoleChangeState({
+      currentRole: member.role,
+      nextRole: "member",
+      targetMemberId: member._id,
+      activeAdminMemberIds,
+    });
+    if (!roleChangeValidation.valid) {
+      throw new ConvexError(roleChangeValidation.error);
+    }
+
+    if (await isMembershipReferenced(ctx, member.groupId, member._id)) {
+      throw new ConvexError(
+        "Mitglied ist in Turnieren dieser Gruppe enthalten und kann nicht entfernt werden"
+      );
+    }
+
+    await ctx.db.delete("groupMembers", member._id);
+  },
+});
+
+export const deleteGroup = mutation({
+  args: { groupId: v.id("groups") },
+  handler: async (ctx, { groupId }) => {
+    await requireGroupAdmin(ctx, groupId);
+
+    const group = await ctx.db.get("groups", groupId);
+    if (!group) throw new ConvexError("Gruppe nicht gefunden");
+
+    await deleteGroupTree(ctx, groupId);
+    await maybeResetCreatedGroupFlag(ctx, group.createdBy);
+  },
+});
+
+export const addMember = internalMutation({
   args: {
     groupId: v.id("groups"),
     userId: v.id("users"),
@@ -561,8 +742,11 @@ export const addMember = mutation({
     role: v.optional(v.union(v.literal("admin"), v.literal("member"))),
   },
   handler: async (ctx, { groupId, userId, displayName, role }) => {
-    await requireGroupAdmin(ctx, groupId);
     const trimmedDisplayName = displayName.trim();
+    const group = await ctx.db.get("groups", groupId);
+    if (!group || !(await hasActiveMembers(ctx, groupId))) {
+      throw new ConvexError("Gruppe nicht gefunden");
+    }
 
     const user = await ctx.db.get("users", userId);
     const existing = await ctx.db

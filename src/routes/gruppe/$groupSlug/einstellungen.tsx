@@ -1,4 +1,4 @@
-import { Link, createFileRoute } from "@tanstack/react-router";
+import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useSuspenseQuery } from "@tanstack/react-query";
 import { useMutation } from "convex/react";
 import { convexQuery } from "@convex-dev/react-query";
@@ -9,7 +9,11 @@ import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
-import { canDemoteAdmin } from "~/lib/groupPermissions";
+import {
+  canDemoteAdmin,
+  canRemoveGroupMember,
+  getRemoveGroupMemberBlockReason,
+} from "~/lib/groupPermissions";
 import { cn } from "~/lib/utils";
 
 export const Route = createFileRoute("/gruppe/$groupSlug/einstellungen")({
@@ -18,6 +22,7 @@ export const Route = createFileRoute("/gruppe/$groupSlug/einstellungen")({
 
 export function GroupSettings() {
   const { groupSlug } = Route.useParams();
+  const navigate = useNavigate();
   const { data: me } = useSuspenseQuery(convexQuery(api.users.me, {}));
   const { data: group } = useSuspenseQuery(
     convexQuery(api.groups.getBySlug, { slug: groupSlug })
@@ -33,17 +38,22 @@ export function GroupSettings() {
     groupId: (group?._id ?? "missing") as any,
   });
   const updateMemberRole = useMutation(api.groups.updateMemberRole);
+  const removeMember = useMutation(api.groups.removeMember);
   const createInviteToken = useMutation(api.groups.createInviteToken);
   const revokeInviteToken = useMutation(api.groups.revokeInviteToken);
   const deleteInviteToken = useMutation(api.groups.deleteInviteToken);
+  const deleteGroup = useMutation(api.groups.deleteGroup);
   const [actionError, setActionError] = useState("");
   const [actionLoadingMemberId, setActionLoadingMemberId] = useState<string | null>(null);
+  const [removingMemberId, setRemovingMemberId] = useState<string | null>(null);
   const [inviteError, setInviteError] = useState("");
   const [inviteLabel, setInviteLabel] = useState("");
   const [isCreatingInvite, setIsCreatingInvite] = useState(false);
   const [revokingInviteId, setRevokingInviteId] = useState<string | null>(null);
   const [deletingInviteId, setDeletingInviteId] = useState<string | null>(null);
   const [copiedInviteId, setCopiedInviteId] = useState<string | null>(null);
+  const [groupError, setGroupError] = useState("");
+  const [isDeletingGroup, setIsDeletingGroup] = useState(false);
   const [latestInvite, setLatestInvite] = useState<{
     inviteTokenId: string;
     token: string;
@@ -59,6 +69,13 @@ export function GroupSettings() {
     ...inviteTokensQuery,
     enabled: !!group && access === "allowed",
   });
+  const latestInviteStatus =
+    latestInvite === null
+      ? null
+      : Date.now() >= latestInvite.expiresAt
+        ? "expired"
+        : inviteTokens.find((invite) => invite._id === latestInvite.inviteTokenId)
+            ?.status ?? "active";
   const origin = useMemo(
     () => (typeof window !== "undefined" ? window.location.origin : ""),
     []
@@ -151,6 +168,9 @@ export function GroupSettings() {
     setRevokingInviteId(inviteTokenId);
     try {
       await revokeInviteToken({ inviteTokenId: inviteTokenId as any });
+      if (latestInvite?.inviteTokenId === inviteTokenId) {
+        setLatestInvite(null);
+      }
     } catch (err: any) {
       setInviteError(err.message ?? "Einladung konnte nicht widerrufen werden.");
     } finally {
@@ -170,6 +190,41 @@ export function GroupSettings() {
       setInviteError(err.message ?? "Einladung konnte nicht gelöscht werden.");
     } finally {
       setDeletingInviteId(null);
+    }
+  };
+
+  const handleRemoveMember = async (memberId: string, displayName: string) => {
+    if (!window.confirm(`${displayName} wirklich aus der Gruppe entfernen?`)) {
+      return;
+    }
+    setActionError("");
+    setRemovingMemberId(memberId);
+    try {
+      await removeMember({ memberId: memberId as any });
+    } catch (err: any) {
+      setActionError(err.message ?? "Mitglied konnte nicht entfernt werden.");
+    } finally {
+      setRemovingMemberId(null);
+    }
+  };
+
+  const handleDeleteGroup = async () => {
+    if (
+      !window.confirm(
+        "Diese Gruppe, alle Turniere, Spiele und Einladungen endgültig löschen?"
+      )
+    ) {
+      return;
+    }
+    setGroupError("");
+    setIsDeletingGroup(true);
+    try {
+      await deleteGroup({ groupId: group._id });
+      navigate({ to: "/" });
+    } catch (err: any) {
+      setGroupError(err.message ?? "Gruppe konnte nicht gelöscht werden.");
+    } finally {
+      setIsDeletingGroup(false);
     }
   };
 
@@ -207,7 +262,7 @@ export function GroupSettings() {
             />
           </div>
 
-          {latestInvite && (
+          {latestInvite && latestInviteStatus === "active" && (
             <div className="space-y-2 rounded-xl border border-brand-teal/20 bg-brand-teal/5 p-3">
               <p className="text-[10px] font-bold uppercase tracking-widest text-brand-teal">
                 Neuer Link erstellt
@@ -245,7 +300,7 @@ export function GroupSettings() {
 
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-xs text-gray-500">
-              Einladungslinks sind 7 Tage gültig, können mehrfach genutzt und jederzeit widerrufen werden.
+              Einladungslinks sind 7 Tage gültig, können mehrfach genutzt, erneut kopiert und jederzeit widerrufen werden.
             </p>
             <Button
               type="submit"
@@ -265,7 +320,7 @@ export function GroupSettings() {
             </div>
           ) : (
             inviteTokens.map((invite, index) => {
-              const inviteUrl = buildInviteUrl(invite.token);
+              const inviteToken = invite.token;
               const statusLabel =
                 invite.status === "active"
                   ? "Aktiv"
@@ -300,7 +355,39 @@ export function GroupSettings() {
                           Erstellt am {new Date(invite.createdAt).toLocaleString("de-DE")} · Gültig bis {new Date(invite.expiresAt).toLocaleString("de-DE")}
                         </p>
                       </div>
-                      {invite.status === "active" ? (
+                    </div>
+                    {invite.status === "active" && inviteToken ? (
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                        <Input
+                          readOnly
+                          value={buildInviteUrl(inviteToken)}
+                          className="h-10 min-w-0 flex-1 bg-gray-50 text-xs"
+                        />
+                        <div className="flex shrink-0 items-center justify-end gap-2">
+                          <Button
+                            type="button"
+                            variant="brandOutline"
+                            size="sm"
+                            onClick={() => copyInvite(invite._id, inviteToken)}
+                          >
+                            {copiedInviteId === invite._id ? "Kopiert" : "Link kopieren"}
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="brandDestructive"
+                            size="sm"
+                            disabled={revokingInviteId === invite._id}
+                            onClick={() => handleRevokeInvite(invite._id)}
+                          >
+                            {revokingInviteId === invite._id ? "..." : "Widerrufen"}
+                          </Button>
+                        </div>
+                      </div>
+                    ) : invite.status === "active" ? (
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <p className="text-xs text-gray-500">
+                          Dieser ältere Link kann nicht erneut angezeigt werden. Erstelle bei Bedarf einen neuen Link oder widerrufe ihn.
+                        </p>
                         <Button
                           type="button"
                           variant="brandDestructive"
@@ -311,7 +398,12 @@ export function GroupSettings() {
                         >
                           {revokingInviteId === invite._id ? "..." : "Widerrufen"}
                         </Button>
-                      ) : (
+                      </div>
+                    ) : (
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <p className="text-xs text-gray-500">
+                          Dieser Link ist nicht mehr nutzbar.
+                        </p>
                         <Button
                           type="button"
                           variant="brandDestructive"
@@ -322,24 +414,8 @@ export function GroupSettings() {
                         >
                           {deletingInviteId === invite._id ? "..." : "Löschen"}
                         </Button>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <Input
-                        readOnly
-                        value={inviteUrl}
-                        className="h-8 min-w-0 flex-1 bg-gray-50 text-xs"
-                      />
-                      <Button
-                        type="button"
-                        variant="brandOutline"
-                        size="sm"
-                        className="shrink-0"
-                        onClick={() => copyInvite(invite._id, invite.token)}
-                      >
-                        {copiedInviteId === invite._id ? "Kopiert" : "Link kopieren"}
-                      </Button>
-                    </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               );
@@ -379,6 +455,8 @@ export function GroupSettings() {
               {members.map((m, i) => (
                 (() => {
                   const canToggleRole = canDemoteAdmin(members, m);
+                  const removeBlockReason = getRemoveGroupMemberBlockReason(members, m);
+                  const canRemove = canRemoveGroupMember(members, m);
                   const isMe = m.userId === me?._id;
                   return (
                     <tr key={m._id} className={cn("animate-slide-in-left hover:bg-gray-50/50 transition-colors", isMe && "bg-brand-navy/[0.03]")} style={{ animationDelay: `${Math.min(i * 0.05, 0.3)}s` }}>
@@ -392,21 +470,43 @@ export function GroupSettings() {
                         </Badge>
                       </td>
                       <td className="px-4 py-4">
-                        {!canToggleRole ? (
-                          <Badge variant="muted" size="xs">Mind. 1 Admin</Badge>
-                        ) : (
-                          <Button
-                            variant="brandOutline"
-                            size="sm"
-                            aria-label={`${m.displayName} ${m.role === "admin" ? "zum Mitglied" : "zum Admin"} machen`}
-                            onClick={() => handleRoleToggle(m._id, m.role)}
-                            disabled={actionLoadingMemberId === m._id}
-                          >
-                            {m.role === "admin"
-                              ? "Zum Mitglied machen"
-                              : "Zum Admin machen"}
-                          </Button>
-                        )}
+                        <div className="flex flex-wrap items-center gap-2">
+                          {!canToggleRole ? (
+                            <Badge variant="muted" size="xs">Mind. 1 Admin</Badge>
+                          ) : (
+                            <Button
+                              variant="brandOutline"
+                              size="sm"
+                              aria-label={`${m.displayName} ${m.role === "admin" ? "zum Mitglied" : "zum Admin"} machen`}
+                              onClick={() => handleRoleToggle(m._id, m.role)}
+                              disabled={actionLoadingMemberId === m._id}
+                            >
+                              {m.role === "admin"
+                                ? "Zum Mitglied machen"
+                                : "Zum Admin machen"}
+                            </Button>
+                          )}
+                          {!isMe && (
+                            canRemove ? (
+                              <Button
+                                variant="brandDestructive"
+                                size="sm"
+                                onClick={() => handleRemoveMember(m._id, m.displayName)}
+                                disabled={removingMemberId === m._id}
+                              >
+                                {removingMemberId === m._id ? "Entfernt..." : "Entfernen"}
+                              </Button>
+                            ) : (
+                              <Badge variant="muted" size="xs">
+                                {removeBlockReason === "referenced"
+                                  ? "Im Turnier"
+                                  : removeBlockReason === "last-member"
+                                    ? "Letztes Mitglied"
+                                    : "Mind. 1 Admin"}
+                              </Badge>
+                            )
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -421,6 +521,8 @@ export function GroupSettings() {
           {members.map((m, i) => (
             (() => {
               const canToggleRole = canDemoteAdmin(members, m);
+              const removeBlockReason = getRemoveGroupMemberBlockReason(members, m);
+              const canRemove = canRemoveGroupMember(members, m);
               const isMe = m.userId === me?._id;
               return (
                 <div
@@ -437,27 +539,77 @@ export function GroupSettings() {
                       {m.role === "admin" ? "Admin" : "Mitglied"}
                     </Badge>
                   </div>
-                  <Button
-                    variant="brandOutline"
-                    size="touchLg"
-                    className="w-full"
-                    aria-label={`${m.displayName} ${m.role === "admin" ? "zum Mitglied" : "zum Admin"} machen`}
-                    onClick={() => handleRoleToggle(m._id, m.role)}
-                    disabled={
-                      actionLoadingMemberId === m._id || !canToggleRole
-                    }
-                  >
-                    {!canToggleRole
-                      ? "Mind. 1 Admin"
-                      : m.role === "admin"
-                        ? "Zum Mitglied machen"
-                        : "Zum Admin machen"}
-                  </Button>
+                  <div className="grid gap-2">
+                    <Button
+                      variant="brandOutline"
+                      size="touchLg"
+                      className="w-full"
+                      aria-label={`${m.displayName} ${m.role === "admin" ? "zum Mitglied" : "zum Admin"} machen`}
+                      onClick={() => handleRoleToggle(m._id, m.role)}
+                      disabled={
+                        actionLoadingMemberId === m._id || !canToggleRole
+                      }
+                    >
+                      {!canToggleRole
+                        ? "Mind. 1 Admin"
+                        : m.role === "admin"
+                          ? "Zum Mitglied machen"
+                          : "Zum Admin machen"}
+                    </Button>
+                    {!isMe && (
+                      <Button
+                        variant="brandDestructive"
+                        size="touchLg"
+                        className="w-full"
+                        onClick={() => handleRemoveMember(m._id, m.displayName)}
+                        disabled={removingMemberId === m._id || !canRemove}
+                      >
+                        {!canRemove
+                          ? removeBlockReason === "referenced"
+                            ? "Im Turnier"
+                            : removeBlockReason === "last-member"
+                              ? "Letztes Mitglied"
+                              : "Mind. 1 Admin"
+                          : removingMemberId === m._id
+                            ? "Entfernt..."
+                            : "Mitglied entfernen"}
+                      </Button>
+                    )}
+                  </div>
                 </div>
               );
             })()
           ))}
         </div>
+      </section>
+
+      <section className="rounded-xl border border-brand-red/20 bg-white p-4 sm:p-5 shadow-sm space-y-4">
+        <div className="space-y-1">
+          <h3 className="section-title-accent font-display text-sm uppercase tracking-widest text-brand-navy">
+            Gruppe löschen
+          </h3>
+          <p className="text-sm text-gray-500">
+            Löscht die Gruppe mitsamt Turnieren, Spielen, Mitgliedschaften und Einladungen endgültig.
+          </p>
+        </div>
+
+        {groupError && (
+          <div className="bg-red-50 border-l-2 border-red-500 p-3" role="alert">
+            <p className="text-[10px] font-bold text-red-700 uppercase tracking-widest">
+              {groupError}
+            </p>
+          </div>
+        )}
+
+        <Button
+          type="button"
+          variant="brandDestructive"
+          size="touchLg"
+          onClick={handleDeleteGroup}
+          disabled={isDeletingGroup}
+        >
+          {isDeletingGroup ? "Gruppe wird gelöscht..." : "Gruppe löschen"}
+        </Button>
       </section>
     </div>
   );

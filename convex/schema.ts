@@ -20,7 +20,8 @@ export default defineSchema({
     createdBy: v.id("users"),
     isPaid: v.boolean(),
   })
-    .index("by_slug", ["slug"]),
+    .index("by_slug", ["slug"])
+    .index("by_creator", ["createdBy"]),
 
   groupMembers: defineTable({
     groupId: v.id("groups"),
@@ -34,7 +35,7 @@ export default defineSchema({
 
   groupInviteTokens: defineTable({
     groupId: v.id("groups"),
-    token: v.string(),
+    token: v.optional(v.string()),
     tokenHash: v.string(),
     label: v.optional(v.string()),
     createdBy: v.id("users"),

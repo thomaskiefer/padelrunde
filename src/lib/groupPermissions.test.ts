@@ -3,6 +3,8 @@ import {
   canCreateAnotherGroup,
   canDemoteAdmin,
   canManageGroup,
+  canRemoveGroupMember,
+  getRemoveGroupMemberBlockReason,
 } from "./groupPermissions";
 
 describe("canManageGroup", () => {
@@ -104,5 +106,74 @@ describe("canDemoteAdmin", () => {
         role: "member",
       })
     ).toBe(true);
+  });
+});
+
+describe("canRemoveGroupMember", () => {
+  it("blocks removing the last member", () => {
+    expect(
+      canRemoveGroupMember([{ userId: "user-1", role: "admin" }], {
+        userId: "user-1",
+        role: "admin",
+      })
+    ).toBe(false);
+  });
+
+  it("blocks removing the last admin when other members remain", () => {
+    expect(
+      canRemoveGroupMember(
+        [
+          { userId: "user-1", role: "admin" },
+          { userId: "user-2", role: "member" },
+        ],
+        { userId: "user-1", role: "admin" }
+      )
+    ).toBe(false);
+  });
+
+  it("allows removing a member when others remain", () => {
+    expect(
+      canRemoveGroupMember(
+        [
+          { userId: "user-1", role: "admin" },
+          { userId: "user-2", role: "member" },
+        ],
+        { userId: "user-2", role: "member" }
+      )
+    ).toBe(true);
+  });
+
+  it("allows removing an admin when another admin exists", () => {
+    expect(
+      canRemoveGroupMember(
+        [
+          { userId: "user-1", role: "admin" },
+          { userId: "user-2", role: "admin" },
+          { userId: "user-3", role: "member" },
+        ],
+        { userId: "user-1", role: "admin" }
+      )
+    ).toBe(true);
+  });
+
+  it("blocks removing members who are referenced by tournaments", () => {
+    expect(
+      canRemoveGroupMember(
+        [
+          { userId: "user-1", role: "admin" },
+          { userId: "user-2", role: "member", isReferenced: true },
+        ],
+        { userId: "user-2", role: "member", isReferenced: true }
+      )
+    ).toBe(false);
+    expect(
+      getRemoveGroupMemberBlockReason(
+        [
+          { userId: "user-1", role: "admin" },
+          { userId: "user-2", role: "member", isReferenced: true },
+        ],
+        { userId: "user-2", role: "member", isReferenced: true }
+      )
+    ).toBe("referenced");
   });
 });
