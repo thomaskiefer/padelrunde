@@ -2082,4 +2082,241 @@ describe("guest players, renaming and small americanos", () => {
       })
     ).rejects.toThrow("2 Plätze");
   });
+
+  it("blocks editing results that a downstream round or finalization already consumed", async () => {
+    const t = createTestClient();
+    await upsertUser(t, "guard-owner", { canCreateGroup: true });
+    const players: Array<Doc<"users">> = [];
+    for (let i = 1; i <= 7; i++) {
+      players.push(await upsertUser(t, `guard-player-${i}`));
+    }
+
+    const ownerCtx = t.withIdentity({ subject: "guard-owner" });
+    const groupId = await ownerCtx.mutation(api.groups.create, {
+      name: "Guard Cup",
+      slug: "guard-cup",
+    });
+    for (const player of players) {
+      await addGroupMember(t, groupId, player._id, player.name);
+    }
+    const members = await ownerCtx.query(api.groups.getMembers, { groupId });
+
+    const tournamentId = await ownerCtx.mutation(api.tournaments.create, {
+      groupId,
+      name: "Guard Cup",
+      mode: "cup",
+      courts: 2,
+      playerIds: members.map((member) => member._id),
+    });
+    await ownerCtx.mutation(api.rounds.generateRounds, { tournamentId });
+
+    const prelimRounds = await ownerCtx.query(api.rounds.listByTournament, {
+      tournamentId,
+    });
+    const firstPrelimMatch =
+      (await ownerCtx.query(api.matches.getByRound, {
+        roundId: prelimRounds[0]._id,
+      }))[0] ?? fail("Missing preliminary match");
+
+    for (const round of prelimRounds) {
+      const roundMatches = await ownerCtx.query(api.matches.getByRound, {
+        roundId: round._id,
+      });
+      for (const match of roundMatches) {
+        await ownerCtx.mutation(api.matches.adminEditScore, {
+          matchId: match._id,
+          scoreA: 20,
+          scoreB: 12,
+        });
+      }
+    }
+    await ownerCtx.mutation(api.rounds.generateKnockoutRounds, { tournamentId });
+
+    // Preliminary results are consumed by knockout seeding -> locked.
+    await expect(
+      ownerCtx.mutation(api.matches.adminEditScore, {
+        matchId: firstPrelimMatch._id,
+        scoreA: 18,
+        scoreB: 14,
+      })
+    ).rejects.toThrow(
+      "Vorrundenergebnisse können nach Start der K.O.-Phase nicht mehr geändert werden"
+    );
+
+    const semifinalRound =
+      (await ownerCtx.query(api.rounds.listByTournament, { tournamentId })).find(
+        (round) => round.phase === "semifinal"
+      ) ?? fail("Missing semifinal round");
+    const semifinalMatches = await ownerCtx.query(api.matches.getByRound, {
+      roundId: semifinalRound._id,
+    });
+    await ownerCtx.mutation(api.matches.adminEditScore, {
+      matchId: semifinalMatches[0]._id,
+      scoreA: 20,
+      scoreB: 12,
+    });
+    await ownerCtx.mutation(api.matches.adminEditScore, {
+      matchId: semifinalMatches[1]._id,
+      scoreA: 20,
+      scoreB: 12,
+    });
+    await ownerCtx.mutation(api.rounds.advanceToFinals, { tournamentId });
+
+    // Semifinal results are consumed by the final/bronze matches -> locked.
+    await expect(
+      ownerCtx.mutation(api.matches.adminEditScore, {
+        matchId: semifinalMatches[0]._id,
+        scoreA: 12,
+        scoreB: 20,
+      })
+    ).rejects.toThrow(
+      "Halbfinalergebnisse können nach Erstellung des Finales nicht mehr geändert werden"
+    );
+
+    const roundsWithFinals = await ownerCtx.query(api.rounds.listByTournament, {
+      tournamentId,
+    });
+    const finalMatch =
+      (await ownerCtx.query(api.matches.getByRound, {
+        roundId:
+          roundsWithFinals.find((round) => round.phase === "final")?._id ??
+          fail("Missing final round"),
+      }))[0] ?? fail("Missing final match");
+    const bronzeMatch =
+      (await ownerCtx.query(api.matches.getByRound, {
+        roundId:
+          roundsWithFinals.find((round) => round.phase === "bronze")?._id ??
+          fail("Missing bronze round"),
+      }))[0] ?? fail("Missing bronze match");
+    await ownerCtx.mutation(api.matches.adminEditScore, {
+      matchId: finalMatch._id,
+      scoreA: 20,
+      scoreB: 12,
+    });
+    await ownerCtx.mutation(api.matches.adminEditScore, {
+      matchId: bronzeMatch._id,
+      scoreA: 18,
+      scoreB: 14,
+    });
+    await ownerCtx.mutation(api.tournaments.updateStatus, {
+      tournamentId,
+      status: "finished",
+    });
+
+    // A finished tournament is fully immutable.
+    await expect(
+      ownerCtx.mutation(api.matches.adminEditScore, {
+        matchId: finalMatch._id,
+        scoreA: 22,
+        scoreB: 10,
+      })
+    ).rejects.toThrow("Turnier ist abgeschlossen");
+  });
+
+  it("does not store a winner for a non-knockout 16:16 draw", async () => {
+    const t = createTestClient();
+    const { firstMatch } = await setupAmericanoTournament(t);
+    const participantMember = await t.run((ctx) =>
+      ctx.db.get("groupMembers", firstMatch.teamA[0] as any)
+    );
+    const participantUser = participantMember?.userId
+      ? await t.run((ctx) => ctx.db.get("users", participantMember.userId!))
+      : null;
+    if (!participantUser) fail("Missing participant user");
+
+    const participantCtx = t.withIdentity({ subject: participantUser.clerkId });
+    await participantCtx.mutation(api.matches.submitScore, {
+      matchId: firstMatch._id,
+      scoreA: 16,
+      scoreB: 16,
+      // A malicious/stale client could pass a winner; it must be ignored.
+      winningSide: "A",
+    });
+
+    const updated = await t.run((ctx) => ctx.db.get("matches", firstMatch._id));
+    expect(updated?.status).toBe("completed");
+    expect(updated?.winningSide).toBeUndefined();
+  });
+
+  it("lets an admin delete a setup tournament, releasing the members it locked", async () => {
+    const t = createTestClient();
+    await upsertUser(t, "del-owner", { canCreateGroup: true });
+    const p1 = await upsertUser(t, "del-p1");
+    const p2 = await upsertUser(t, "del-p2");
+    const p3 = await upsertUser(t, "del-p3");
+
+    const ownerCtx = t.withIdentity({ subject: "del-owner" });
+    const groupId = await ownerCtx.mutation(api.groups.create, {
+      name: "Delete Group",
+      slug: "delete-group",
+    });
+    for (const player of [p1, p2, p3]) {
+      await addGroupMember(t, groupId, player._id, player.name);
+    }
+    const members = await ownerCtx.query(api.groups.getMembers, { groupId });
+    const p1Member =
+      members.find((member) => member.userId === p1._id) ??
+      fail("Missing member");
+
+    const tournamentId = await ownerCtx.mutation(api.tournaments.create, {
+      groupId,
+      name: "Setup Turnier",
+      mode: "americano",
+      courts: 1,
+      playerIds: members.map((member) => member._id),
+    });
+
+    // While the member is referenced by the (unstarted) tournament it is locked.
+    await expect(
+      ownerCtx.mutation(api.groups.removeMember, { memberId: p1Member._id })
+    ).rejects.toThrow("Mitglied ist in Turnieren");
+
+    await ownerCtx.mutation(api.tournaments.deleteTournament, { tournamentId });
+    expect(
+      await t.run((ctx) => ctx.db.get("tournaments", tournamentId))
+    ).toBeNull();
+
+    // With the tournament gone the member can be removed.
+    await ownerCtx.mutation(api.groups.removeMember, { memberId: p1Member._id });
+    const remaining = await ownerCtx.query(api.groups.getMembers, { groupId });
+    expect(remaining.some((member) => member._id === p1Member._id)).toBe(false);
+  });
+
+  it("does not clobber a stored name/email when Clerk sends empty values", async () => {
+    const t = createTestClient();
+    await t.mutation(internal.users.upsertFromClerk, {
+      data: { id: "clerk-x", name: "Alice Example", email: "alice@example.com" },
+    });
+    await t.mutation(internal.users.upsertFromClerk, {
+      data: { id: "clerk-x", name: "", email: "" },
+    });
+
+    const user = await findUserByClerkId(t, "clerk-x");
+    expect(user?.name).toBe("Alice Example");
+    expect(user?.email).toBe("alice@example.com");
+  });
+
+  it("restores the creator's group-creation right when their group is torn down via Clerk deletion", async () => {
+    const t = createTestClient();
+    await upsertUser(t, "flag-creator", { canCreateGroup: true });
+    const other = await upsertUser(t, "flag-other");
+
+    const creatorCtx = t.withIdentity({ subject: "flag-creator" });
+    const groupId = await creatorCtx.mutation(api.groups.create, {
+      name: "Flag Group",
+      slug: "flag-group",
+    });
+    await addGroupMember(t, groupId, other._id, other.name, "admin");
+
+    await creatorCtx.mutation(api.groups.leaveGroup, { groupId });
+    const creatorAfterLeave = await findUserByClerkId(t, "flag-creator");
+    expect(creatorAfterLeave?.hasCreatedGroup).toBe(true);
+
+    // The only remaining member's account is deleted -> group is torn down.
+    await t.mutation(internal.users.deleteFromClerk, { clerkUserId: "flag-other" });
+    expect(await t.run((ctx) => ctx.db.get("groups", groupId))).toBeNull();
+
+    const creatorFinal = await findUserByClerkId(t, "flag-creator");
+    expect(creatorFinal?.hasCreatedGroup).toBe(false);
+  });
 });

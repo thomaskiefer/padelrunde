@@ -70,6 +70,10 @@ mock.module("@tanstack/react-query", () => ({
 
 mock.module("convex/react", () => ({
   useMutation: () => mutationState.joinWithInvite,
+  useConvexAuth: () => ({
+    isAuthenticated: authState.isSignedIn,
+    isLoading: false,
+  }),
 }));
 
 mock.module("@convex-dev/react-query", () => ({

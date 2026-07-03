@@ -1,4 +1,4 @@
-import { Link, createFileRoute } from "@tanstack/react-router";
+import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useSuspenseQuery } from "@tanstack/react-query";
 import { useMutation } from "convex/react";
 import { convexQuery } from "@convex-dev/react-query";
@@ -20,6 +20,7 @@ export const Route = createFileRoute(
 export function TournamentAdmin() {
   const { groupSlug, tournamentId } = Route.useParams();
   const tid = tournamentId as Id<"tournaments">;
+  const navigate = useNavigate();
   const { data: me } = useSuspenseQuery(convexQuery(api.users.me, {}));
   const { data: tournament } = useSuspenseQuery(
     convexQuery(api.tournaments.get, { tournamentId: tid })
@@ -37,12 +38,16 @@ export function TournamentAdmin() {
   const updateStatus = useMutation(api.tournaments.updateStatus);
   const generateKnockout = useMutation(api.rounds.generateKnockoutRounds);
   const advanceToFinals = useMutation(api.rounds.advanceToFinals);
+  const deleteTournament = useMutation(api.tournaments.deleteTournament);
 
   const [confirmFinish, setConfirmFinish] = useState(false);
   const [actionError, setActionError] = useState("");
   const [actionLoading, setActionLoading] = useState<
     "knockout" | "finals" | "finish" | null
   >(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
 
   const { data: prelimDone = false, isLoading: prelimDoneLoading } = useQuery({
     ...convexQuery(api.matches.allMatchesCompletedForPhase, {
@@ -133,6 +138,18 @@ export function TournamentAdmin() {
       return false;
     } finally {
       setActionLoading(null);
+    }
+  };
+
+  const handleDeleteTournament = async () => {
+    setDeleteError("");
+    setDeleting(true);
+    try {
+      await deleteTournament({ tournamentId: tid });
+      navigate({ to: "/gruppe/$groupSlug", params: { groupSlug } });
+    } catch (err: any) {
+      setDeleteError(err.message ?? "Turnier konnte nicht gelöscht werden");
+      setDeleting(false);
     }
   };
 
@@ -228,6 +245,56 @@ export function TournamentAdmin() {
         {actionError && <p className="mt-3 text-[10px] font-bold uppercase tracking-widest text-red-200" role="alert">{actionError}</p>}
       </div>
 
+      <div className="rounded-xl border border-brand-red/20 bg-white p-4 sm:p-5 shadow-sm space-y-3">
+        <div className="space-y-1">
+          <h3 className="section-title-accent font-display text-sm uppercase tracking-widest text-brand-navy">
+            Turnier löschen
+          </h3>
+          <p className="text-sm text-gray-500">
+            Entfernt dieses Turnier mit allen Runden und Spielen. Spieler, die nur
+            hier eingetragen sind, lassen sich danach wieder aus der Gruppe entfernen.
+          </p>
+        </div>
+        {!confirmDelete ? (
+          <Button
+            type="button"
+            variant="brandDestructive"
+            size="touchLg"
+            onClick={() => setConfirmDelete(true)}
+            disabled={deleting}
+          >
+            Turnier löschen
+          </Button>
+        ) : (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm text-gray-600">Wirklich löschen?</span>
+            <Button
+              type="button"
+              variant="brandDestructive"
+              size="touchLg"
+              onClick={handleDeleteTournament}
+              disabled={deleting}
+            >
+              {deleting ? "Wird gelöscht..." : "Ja, löschen"}
+            </Button>
+            <Button
+              type="button"
+              variant="brandGhost"
+              size="touchLg"
+              onClick={() => setConfirmDelete(false)}
+              disabled={deleting}
+            >
+              Abbrechen
+            </Button>
+          </div>
+        )}
+        {deleteError && (
+          <div className="bg-red-50 border-l-2 border-red-500 p-3" role="alert">
+            <p className="text-[10px] font-bold text-red-700 uppercase tracking-widest">{deleteError}</p>
+          </div>
+        )}
+      </div>
+
       <div className="space-y-6">
         {[...rounds]
           .sort((a, b) => a.roundNumber - b.roundNumber)
@@ -307,12 +374,17 @@ function AdminMatchRow({
   );
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  // Tracks whether the admin has unsaved edits. While dirty, a reactive query
+  // update must not overwrite what they are typing; after a save we clear it so
+  // the row re-syncs to the freshly stored server value.
+  const [dirty, setDirty] = useState(false);
 
   useEffect(() => {
+    if (dirty) return;
     setScoreA(String(match.scoreA ?? ""));
     setScoreB(String(match.scoreB ?? ""));
     setWinningSide(match.winningSide);
-  }, [match.scoreA, match.scoreB, match.winningSide]);
+  }, [match.scoreA, match.scoreB, match.winningSide, dirty]);
 
   const aVal = scoreA === "" ? NaN : Number(scoreA);
   const bVal = scoreB === "" ? NaN : Number(scoreB);
@@ -337,6 +409,7 @@ function AdminMatchRow({
         scoreB: bVal,
         winningSide: isTie ? winningSide : undefined,
       });
+      setDirty(false);
     } catch (err: any) {
       setError(err.message ?? "Fehler");
     } finally {
@@ -370,7 +443,10 @@ function AdminMatchRow({
               isValid ? "border-brand-teal bg-brand-teal/5 text-brand-teal" : "border-gray-200 focus-visible:border-brand-red"
             )}
             value={scoreA}
-            onChange={(e) => setScoreA(e.target.value.replace(/\D/g, ""))}
+            onChange={(e) => {
+              setDirty(true);
+              setScoreA(e.target.value.replace(/\D/g, ""));
+            }}
           />
           <span className="text-gray-300 font-display" aria-hidden="true">:</span>
           <input
@@ -382,7 +458,10 @@ function AdminMatchRow({
               isValid ? "border-brand-teal bg-brand-teal/5 text-brand-teal" : "border-gray-200 focus-visible:border-brand-red"
             )}
             value={scoreB}
-            onChange={(e) => setScoreB(e.target.value.replace(/\D/g, ""))}
+            onChange={(e) => {
+              setDirty(true);
+              setScoreB(e.target.value.replace(/\D/g, ""));
+            }}
           />
         </div>
 
@@ -401,7 +480,10 @@ function AdminMatchRow({
               variant={winningSide === "A" ? "brand" : "outline"}
               size="touch"
               className="flex-1 truncate"
-              onClick={() => setWinningSide("A")}
+              onClick={() => {
+                setDirty(true);
+                setWinningSide("A");
+              }}
             >
               {match.teamANames.join(" & ")}
             </Button>
@@ -409,7 +491,10 @@ function AdminMatchRow({
               variant={winningSide === "B" ? "brand" : "outline"}
               size="touch"
               className="flex-1 truncate"
-              onClick={() => setWinningSide("B")}
+              onClick={() => {
+                setDirty(true);
+                setWinningSide("B");
+              }}
             >
               {match.teamBNames.join(" & ")}
             </Button>

@@ -35,25 +35,41 @@ export function TournamentView() {
       tournamentId: tournamentId as Id<"tournaments">,
     })
   );
-  const { data: members = [], isLoading: membersLoading } = useQuery({
+  const {
+    data: members = [],
+    isLoading: membersLoading,
+    isError: membersError,
+  } = useQuery({
     ...convexQuery(api.groups.getMembers, {
       groupId: (tournament?.groupId ?? "missing") as any,
     }),
     enabled: !!tournament,
   });
-  const { data: rounds = [], isLoading: roundsLoading } = useQuery({
+  const {
+    data: rounds = [],
+    isLoading: roundsLoading,
+    isError: roundsError,
+  } = useQuery({
     ...convexQuery(api.rounds.listByTournament, {
       tournamentId: tournamentId as Id<"tournaments">,
     }),
     enabled: !!tournament,
   });
-  const { data: standings = [], isLoading: standingsLoading } = useQuery({
+  const {
+    data: standings = [],
+    isLoading: standingsLoading,
+    isError: standingsError,
+  } = useQuery({
     ...convexQuery(api.standings.getStandings, {
       tournamentId: tournamentId as Id<"tournaments">,
     }),
     enabled: !!tournament,
   });
-  const { data: allMatches = [], isLoading: matchesLoading } = useQuery({
+  const {
+    data: allMatches = [],
+    isLoading: matchesLoading,
+    isError: matchesError,
+  } = useQuery({
     ...convexQuery(api.matches.getByTournament, {
       tournamentId: tournamentId as Id<"tournaments">,
     }),
@@ -81,6 +97,27 @@ export function TournamentView() {
 
   if (roundsLoading || standingsLoading || matchesLoading) {
     return <div className="mx-auto max-w-5xl p-4 mt-12 text-center">Turnier wird geladen...</div>;
+  }
+
+  // Surface load failures instead of silently rendering a de-privileged page:
+  // a failed getMembers would otherwise hide admin controls and lock genuine
+  // participants out of entering scores with no indication anything went wrong.
+  if (membersError || roundsError || standingsError || matchesError) {
+    return (
+      <div className="mx-auto max-w-5xl p-4 mt-12 text-center animate-fade-in-up">
+        <h2 className="font-display text-xl uppercase text-brand-navy mb-2">
+          Turnier konnte nicht geladen werden
+        </h2>
+        <p className="text-gray-500 text-sm mb-4">Bitte versuche es erneut.</p>
+        <button
+          type="button"
+          onClick={() => window.location.reload()}
+          className="text-[10px] uppercase tracking-[0.2em] font-bold text-brand-red hover:text-brand-navy transition-colors"
+        >
+          Seite neu laden
+        </button>
+      </div>
+    );
   }
 
   const canManage = canManageGroup(me ?? null, members);

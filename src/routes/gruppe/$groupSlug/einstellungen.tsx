@@ -2,7 +2,7 @@ import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useSuspenseQuery } from "@tanstack/react-query";
 import { useMutation } from "convex/react";
 import { convexQuery } from "@convex-dev/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api } from "../../../../convex/_generated/api";
 import { resolveSettingsAccess } from "./-access";
 import { Badge } from "~/components/ui/badge";
@@ -88,6 +88,16 @@ export function GroupSettings() {
     () => (typeof window !== "undefined" ? window.location.origin : ""),
     []
   );
+  // Server-computed invite.status is a snapshot; a token that crosses its
+  // expiresAt while this page stays open would keep showing "Aktiv" (with a
+  // working copy button) until an unrelated refetch. Recompute effective status
+  // against a client clock. Starts at 0 (matches SSR) then ticks on the client.
+  const [now, setNow] = useState(0);
+  useEffect(() => {
+    setNow(Date.now());
+    const id = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, []);
 
   if (!group) {
     return (
@@ -370,17 +380,23 @@ export function GroupSettings() {
             </div>
           ) : (
             inviteTokens.map((invite, index) => {
+              const status =
+                invite.status === "active" &&
+                now > 0 &&
+                now >= invite.expiresAt
+                  ? "expired"
+                  : invite.status;
               const inviteToken = invite.token;
               const statusLabel =
-                invite.status === "active"
+                status === "active"
                   ? "Aktiv"
-                  : invite.status === "expired"
+                  : status === "expired"
                     ? "Abgelaufen"
                     : "Widerrufen";
               const statusVariant =
-                invite.status === "active"
+                status === "active"
                   ? "brandTeal"
-                  : invite.status === "expired"
+                  : status === "expired"
                     ? "muted"
                     : "brandRed";
 
@@ -406,7 +422,7 @@ export function GroupSettings() {
                         </p>
                       </div>
                     </div>
-                    {invite.status === "active" && inviteToken ? (
+                    {status === "active" && inviteToken ? (
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                         <Input
                           readOnly
@@ -433,7 +449,7 @@ export function GroupSettings() {
                           </Button>
                         </div>
                       </div>
-                    ) : invite.status === "active" ? (
+                    ) : status === "active" ? (
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                         <p className="text-xs text-gray-500">
                           Dieser ältere Link kann nicht erneut angezeigt werden. Erstelle bei Bedarf einen neuen Link oder widerrufe ihn.

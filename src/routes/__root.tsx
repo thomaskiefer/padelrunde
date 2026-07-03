@@ -54,11 +54,18 @@ export const Route = createRootRouteWithContext<{
     ],
   }),
   beforeLoad: async (ctx) => {
-    const { token } = await fetchClerkAuth();
-    const serverHttpClient = ctx.context.convexQueryClient.serverHttpClient;
-    if (token && serverHttpClient) {
-      serverHttpClient.setAuth(token);
-      await serverHttpClient.mutation(api.users.ensureCurrentUser, {});
+    // Best-effort auth + user provisioning: a transient Clerk/Convex failure
+    // must never reject here, or the whole app renders the framework's bare
+    // error page. The client-side EnsureCurrentUserInBackground retries anyway.
+    try {
+      const { token } = await fetchClerkAuth();
+      const serverHttpClient = ctx.context.convexQueryClient.serverHttpClient;
+      if (token && serverHttpClient) {
+        serverHttpClient.setAuth(token);
+        await serverHttpClient.mutation(api.users.ensureCurrentUser, {});
+      }
+    } catch (error) {
+      console.error("Root beforeLoad provisioning failed", error);
     }
   },
   component: RootComponent,

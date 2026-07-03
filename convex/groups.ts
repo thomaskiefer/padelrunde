@@ -107,7 +107,7 @@ async function listActiveAdminMemberIds(
     .map(({ member }) => member._id);
 }
 
-async function maybeResetCreatedGroupFlag(
+export async function maybeResetCreatedGroupFlag(
   ctx: MutationCtx,
   userId: Id<"users">
 ) {

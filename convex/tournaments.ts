@@ -173,3 +173,34 @@ export const updateStatus = mutation({
     await ctx.db.patch("tournaments", tournamentId, { status });
   },
 });
+
+// Deletes a tournament and all of its rounds/matches. This is the only way to
+// cancel a tournament and, in particular, to release members that were only
+// "referenced" by an unstarted (setup) tournament and therefore could not be
+// removed from the group.
+export const deleteTournament = mutation({
+  args: { tournamentId: v.id("tournaments") },
+  handler: async (ctx, { tournamentId }) => {
+    const tournament = await ctx.db.get("tournaments", tournamentId);
+    if (!tournament) throw new ConvexError("Turnier nicht gefunden");
+    await requireGroupAdmin(ctx, tournament.groupId);
+
+    const matches = await ctx.db
+      .query("matches")
+      .withIndex("by_tournament", (q) => q.eq("tournamentId", tournamentId))
+      .collect();
+    for (const match of matches) {
+      await ctx.db.delete("matches", match._id);
+    }
+
+    const rounds = await ctx.db
+      .query("rounds")
+      .withIndex("by_tournament", (q) => q.eq("tournamentId", tournamentId))
+      .collect();
+    for (const round of rounds) {
+      await ctx.db.delete("rounds", round._id);
+    }
+
+    await ctx.db.delete("tournaments", tournamentId);
+  },
+});

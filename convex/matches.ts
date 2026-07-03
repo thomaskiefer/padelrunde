@@ -7,8 +7,51 @@ import {
   validateScore,
 } from "./model/validation";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
+import type { Doc } from "./_generated/dataModel";
 
 const KNOCKOUT_PHASES = new Set(["semifinal", "bronze", "final"]);
+
+// Blocks score edits whose result has already been consumed by a downstream
+// round or by finalization, which would otherwise leave the bracket / champion
+// pointing at stale teams. A completed preliminary result is locked once the
+// knockout phase has been seeded from it; a semifinal result is locked once the
+// final/bronze matches have been generated from it; nothing is editable once
+// the tournament is finished.
+async function assertMatchResultEditable(
+  ctx: QueryCtx | MutationCtx,
+  tournament: Doc<"tournaments">,
+  round: Doc<"rounds"> | null
+) {
+  if (tournament.status === "finished") {
+    throw new ConvexError(
+      "Turnier ist abgeschlossen – Ergebnisse können nicht mehr geändert werden"
+    );
+  }
+  if (!round) return;
+  if (round.phase !== "preliminary" && round.phase !== "semifinal") return;
+
+  const rounds = await ctx.db
+    .query("rounds")
+    .withIndex("by_tournament", (q) => q.eq("tournamentId", tournament._id))
+    .collect();
+
+  if (
+    round.phase === "preliminary" &&
+    rounds.some((r) => KNOCKOUT_PHASES.has(r.phase))
+  ) {
+    throw new ConvexError(
+      "Vorrundenergebnisse können nach Start der K.O.-Phase nicht mehr geändert werden"
+    );
+  }
+  if (
+    round.phase === "semifinal" &&
+    rounds.some((r) => r.phase === "final" || r.phase === "bronze")
+  ) {
+    throw new ConvexError(
+      "Halbfinalergebnisse können nach Erstellung des Finales nicht mehr geändert werden"
+    );
+  }
+}
 
 async function isMatchParticipant(
   ctx: QueryCtx | MutationCtx,
@@ -99,6 +142,8 @@ export const submitScore = mutation({
     const round = await ctx.db.get("rounds", match.roundId);
     const isKnockout = round && KNOCKOUT_PHASES.has(round.phase);
 
+    await assertMatchResultEditable(ctx, tournament, round);
+
     if (isKnockout) {
       const validation = validateKnockoutScore(scoreA, scoreB, winningSide);
       if (!validation.valid) {
@@ -115,8 +160,11 @@ export const submitScore = mutation({
       throw new ConvexError("Ergebnis wurde bereits eingetragen");
     }
 
-    const resolvedWinningSide =
-      determineWinningSide(scoreA, scoreB) ?? winningSide;
+    // A non-knockout draw has no winner: never persist a client-supplied
+    // winningSide for it. Knockout draws require an explicitly chosen winner.
+    const resolvedWinningSide = isKnockout
+      ? (determineWinningSide(scoreA, scoreB) ?? winningSide)
+      : determineWinningSide(scoreA, scoreB);
 
     await ctx.db.patch("matches", matchId, {
       scoreA,
@@ -148,6 +196,8 @@ export const adminEditScore = mutation({
     const round = await ctx.db.get("rounds", match.roundId);
     const isKnockout = round && KNOCKOUT_PHASES.has(round.phase);
 
+    await assertMatchResultEditable(ctx, tournament, round);
+
     if (isKnockout) {
       const validation = validateKnockoutScore(scoreA, scoreB, winningSide);
       if (!validation.valid) {
@@ -167,11 +217,17 @@ export const adminEditScore = mutation({
         editedAt: Date.now(),
         previousScoreA: match.scoreA,
         previousScoreB: match.scoreB,
+        // Preserve the prior winner so a knockout winner-flip on an unchanged
+        // 16:16 tie is not audited as a meaningless no-op edit.
+        previousWinningSide: match.winningSide,
       });
     }
 
-    const resolvedWinningSide =
-      determineWinningSide(scoreA, scoreB) ?? winningSide;
+    // A non-knockout draw has no winner: never persist a client-supplied
+    // winningSide for it. Knockout draws require an explicitly chosen winner.
+    const resolvedWinningSide = isKnockout
+      ? (determineWinningSide(scoreA, scoreB) ?? winningSide)
+      : determineWinningSide(scoreA, scoreB);
 
     await ctx.db.patch("matches", matchId, {
       scoreA,

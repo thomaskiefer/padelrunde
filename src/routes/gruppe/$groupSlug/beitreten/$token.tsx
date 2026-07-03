@@ -1,7 +1,7 @@
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { SignInButton, useAuth } from "@clerk/tanstack-react-start";
 import { convexQuery } from "@convex-dev/react-query";
-import { useMutation } from "convex/react";
+import { useConvexAuth, useMutation } from "convex/react";
 import { useQuery, useSuspenseQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { api } from "../../../../../convex/_generated/api";
@@ -17,6 +17,7 @@ export function GroupJoinInvite() {
   const { groupSlug, token } = Route.useParams();
   const navigate = useNavigate();
   const { isSignedIn } = useAuth();
+  const { isAuthenticated: isConvexReady } = useConvexAuth();
   const { data: me } = useQuery(convexQuery(api.users.me, {}));
   const { data: invite } = useSuspenseQuery(
     convexQuery(api.groups.getJoinInvite, { token })
@@ -111,7 +112,10 @@ export function GroupJoinInvite() {
           Du bist bereits Mitglied dieser Gruppe.
         </p>
         <Button variant="brandNavy" size="touchLg" asChild>
-          <Link to="/gruppe/$groupSlug" params={{ groupSlug }}>
+          <Link
+            to="/gruppe/$groupSlug"
+            params={{ groupSlug: group?.slug ?? groupSlug }}
+          >
             Zur Gruppe
           </Link>
         </Button>
@@ -168,12 +172,16 @@ export function GroupJoinInvite() {
 
         <Button
           type="submit"
-          variant={joining ? "brandSubtle" : "brand"}
+          variant={joining || !isConvexReady || !me ? "brandSubtle" : "brand"}
           size="touchXl"
           className="w-full"
-          disabled={joining || !displayName.trim()}
+          disabled={joining || !displayName.trim() || !isConvexReady || !me}
         >
-          {joining ? "Wird beigetreten..." : "Gruppe beitreten"}
+          {joining
+            ? "Wird beigetreten..."
+            : !isConvexReady || !me
+              ? "Anmeldung wird vorbereitet..."
+              : "Gruppe beitreten"}
         </Button>
       </form>
     </div>

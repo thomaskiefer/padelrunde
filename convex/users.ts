@@ -5,6 +5,7 @@ import {
   query
 } from "./_generated/server";
 import { requireSuperAdmin } from "./helpers";
+import { maybeResetCreatedGroupFlag } from "./groups";
 import { collectHistoricalMemberIds } from "./model/history";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 
@@ -180,11 +181,17 @@ export const upsertFromClerk = internalMutation({
       .withIndex("by_clerk_id", (q) => q.eq("clerkId", data.id))
       .unique();
 
+    // Clerk can deliver empty name/email (accounts without first/last name, or
+    // events that omit the primary email). Fall back the same way the
+    // identity-based sync does instead of clobbering good data with "".
+    const resolvedName = data.name.trim() || existing?.name || data.email || data.id;
+    const resolvedEmail = data.email || existing?.email || "";
+
     if (existing) {
       await ctx.db.patch("users", existing._id, {
-        name: data.name,
-        email: data.email,
-        avatarUrl: data.imageUrl,
+        name: resolvedName,
+        email: resolvedEmail,
+        avatarUrl: data.imageUrl ?? existing.avatarUrl,
         isSuperAdmin: resolveStoredSuperAdminState({
           clerkId: data.id,
           existingIsSuperAdmin: existing.isSuperAdmin,
@@ -194,8 +201,8 @@ export const upsertFromClerk = internalMutation({
     } else {
       await ctx.db.insert("users", {
         clerkId: data.id,
-        name: data.name,
-        email: data.email,
+        name: resolvedName,
+        email: resolvedEmail,
         avatarUrl: data.imageUrl,
         isSuperAdmin: resolveStoredSuperAdminState({ clerkId: data.id }),
         canCreateGroup: false,
@@ -348,7 +355,14 @@ export const deleteFromClerk = internalMutation({
         await ctx.db.delete("groupInviteTokens", inviteToken._id);
       }
 
+      // Free the creator's "one group" allowance the same way deleteGroup does;
+      // otherwise a creator who already left stays locked out of ever creating
+      // another group. Skip the user currently being deleted.
+      const deletedGroup = await ctx.db.get("groups", groupId);
       await ctx.db.delete("groups", groupId);
+      if (deletedGroup && deletedGroup.createdBy !== user._id) {
+        await maybeResetCreatedGroupFlag(ctx, deletedGroup.createdBy);
+      }
     }
 
     await ctx.db.delete("users", user._id);

@@ -20,6 +20,7 @@ function CreateGroup() {
   const createGroup = useMutation(api.groups.create);
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
+  const [slugTouched, setSlugTouched] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const allowed = canCreateAnotherGroup(me);
@@ -43,7 +44,10 @@ function CreateGroup() {
 
   const handleNameChange = (value: string) => {
     setName(value);
-    setSlug(normalizeSlug(value));
+    // Keep mirroring the name into the slug only until the user edits the slug
+    // directly — the slug is the permanent, unchangeable public URL, so a manual
+    // choice must never be silently overwritten by a later name edit.
+    if (!slugTouched) setSlug(normalizeSlug(value));
   };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -121,7 +125,10 @@ function CreateGroup() {
               <input
                 id="slug"
                 value={slug}
-                onChange={(e) => setSlug(normalizeSlug(e.target.value))}
+                onChange={(e) => {
+                  setSlugTouched(true);
+                  setSlug(normalizeSlug(e.target.value));
+                }}
                 placeholder="padelfreunde-obersulm"
                 required
                 className="h-full w-full min-w-0 bg-transparent pl-0 pr-3 font-mono text-sm outline-none placeholder:text-muted-foreground"

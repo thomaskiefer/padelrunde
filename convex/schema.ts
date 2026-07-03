@@ -102,6 +102,7 @@ export default defineSchema({
           editedAt: v.number(),
           previousScoreA: v.number(),
           previousScoreB: v.number(),
+          previousWinningSide: v.optional(v.union(v.literal("A"), v.literal("B"))),
         })
       )
     ),
