@@ -38,8 +38,10 @@ export const generateRounds = mutation({
       playerIds.map(async (memberId) => {
         const member = await ctx.db.get("groupMembers", memberId);
         if (!member || member.groupId !== tournament.groupId) return false;
-        const memberUser = await ctx.db.get("users", member.userId);
-        return Boolean(memberUser);
+        if (member.isGuest) return true;
+        return member.userId
+          ? Boolean(await ctx.db.get("users", member.userId))
+          : false;
       })
     );
     if (playerValidity.some((isValid) => !isValid)) {

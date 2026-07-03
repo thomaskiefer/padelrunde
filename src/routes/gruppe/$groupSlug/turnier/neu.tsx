@@ -2,9 +2,12 @@ import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useSuspenseQuery } from "@tanstack/react-query";
 import { useMutation } from "convex/react";
 import { convexQuery } from "@convex-dev/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "../../../../../convex/_generated/api";
-import { validateTournamentConfig } from "../../../../../convex/model/validation";
+import {
+  maxCourtsForPlayers,
+  validateTournamentConfig,
+} from "../../../../../convex/model/validation";
 import { resolveTournamentCreateAccess } from "../-access";
 import type { Id } from "../../../../../convex/_generated/dataModel";
 import { Input } from "~/components/ui/input";
@@ -48,6 +51,11 @@ export function CreateTournament() {
   );
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  const maxCourts = maxCourtsForPlayers(selectedPlayers.size);
+  useEffect(() => {
+    if (courts > maxCourts) setCourts(maxCourts);
+  }, [courts, maxCourts]);
 
   if (!group) {
     return (
@@ -164,14 +172,14 @@ export function CreateTournament() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="americano">Americano (4 oder 8 Spieler)</SelectItem>
+                  <SelectItem value="americano">Americano (4–8 Spieler)</SelectItem>
                   <SelectItem value="cup">Padel Cup (8 Spieler)</SelectItem>
                 </SelectContent>
               </Select>
               <p className="text-[10px] text-gray-400 leading-relaxed">
                 {mode === "cup"
                   ? "5 Vorrunden, danach Halbfinale, Finale und Spiel um Platz 3."
-                  : "Jeder spielt mit wechselnden Partnern, 32 Punkte pro Spiel."}
+                  : "Jeder spielt mit wechselnden Partnern, 32 Punkte pro Spiel. Bei 5–7 Spielern pausieren pro Runde abwechselnd einzelne."}
               </p>
             </div>
 
@@ -188,9 +196,16 @@ export function CreateTournament() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="1">1 Platz</SelectItem>
-                  <SelectItem value="2">2 Plätze</SelectItem>
+                  <SelectItem value="2" disabled={maxCourts < 2}>
+                    2 Plätze
+                  </SelectItem>
                 </SelectContent>
               </Select>
+              {maxCourts < 2 && (
+                <p className="text-[10px] text-gray-400 leading-relaxed">
+                  Für 2 Plätze mindestens 8 Spieler wählen.
+                </p>
+              )}
             </div>
           </div>
 
@@ -203,7 +218,7 @@ export function CreateTournament() {
                 "font-display text-xs",
                 playerCountValid ? "text-brand-teal" : "text-brand-red"
               )}>
-                {selectedPlayers.size} / {mode === "cup" ? "8" : "4 oder 8"}
+                {selectedPlayers.size} / {mode === "cup" ? "8" : "4–8"}
               </span>
             </div>
             
@@ -221,6 +236,7 @@ export function CreateTournament() {
                   onClick={() => togglePlayer(m._id)}
                 >
                   {m.displayName}
+                  {m.isGuest && <span className="opacity-60"> · Gast</span>}
                 </Button>
               ))}
             </div>

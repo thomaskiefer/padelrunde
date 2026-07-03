@@ -220,7 +220,7 @@ describe("convex integration flows", () => {
       ctx.db.get("groupMembers", firstMatch.teamA[0] as any)
     );
     const participantUser = participantMember
-      ? await t.run((ctx) => ctx.db.get("users", participantMember.userId))
+      ? await t.run((ctx) => ctx.db.get("users", participantMember.userId!))
       : null;
     if (!participantUser || !spectator) fail("Missing participant test users");
 
@@ -288,7 +288,7 @@ describe("convex integration flows", () => {
       groupId,
       name: "Evening Americano",
       mode: "americano",
-      courts: 2,
+      courts: 1,
       playerIds: [
         owner._id,
         player2._id,
@@ -353,7 +353,7 @@ describe("convex integration flows", () => {
       ctx.db.get("groupMembers", firstMatch.teamA[0] as any)
     );
     const participantUser = participantMember
-      ? await t.run((ctx) => ctx.db.get("users", participantMember.userId))
+      ? await t.run((ctx) => ctx.db.get("users", participantMember.userId!))
       : null;
     if (!participantUser) fail("Missing participant");
 
@@ -1070,10 +1070,12 @@ describe("convex integration flows", () => {
     ).toBe("Late Joiner");
 
     const tournamentPlayers = membersAfterPromotion
-      .filter((member) =>
-        [owner._id, promotedUser._id, player1._id, player2._id].includes(
-          member.userId
-        )
+      .filter(
+        (member) =>
+          member.userId != null &&
+          [owner._id, promotedUser._id, player1._id, player2._id].includes(
+            member.userId
+          )
       )
       .map((member) => member._id);
 
@@ -1685,5 +1687,399 @@ describe("convex integration flows", () => {
     } finally {
       process.env.SUPERADMIN_CLERK_IDS = previousSuperAdminIds;
     }
+  });
+});
+
+describe("guest players, renaming and small americanos", () => {
+  it("lets an admin add a guest and use it as a tournament player", async () => {
+    const t = createTestClient();
+    const owner = await upsertUser(t, "guest-owner", { canCreateGroup: true });
+    const ownerCtx = t.withIdentity({ subject: "guest-owner" });
+    const groupId = await ownerCtx.mutation(api.groups.create, {
+      name: "Guest Group",
+      slug: "guest-group",
+    });
+
+    const guestId = await ownerCtx.mutation(api.groups.addGuestMember, {
+      groupId,
+      displayName: "  Gast Gustav  ",
+    });
+
+    const members = await ownerCtx.query(api.groups.getMembers, { groupId });
+    const guest = members.find((member) => member._id === guestId);
+    expect(guest?.isGuest).toBe(true);
+    expect(guest?.displayName).toBe("Gast Gustav");
+    expect(guest?.userId).toBeUndefined();
+
+    // Owner (admin) is auto-added as a member on group creation; add two more guests
+    const guest2 = await ownerCtx.mutation(api.groups.addGuestMember, {
+      groupId,
+      displayName: "Gast Greta",
+    });
+    const guest3 = await ownerCtx.mutation(api.groups.addGuestMember, {
+      groupId,
+      displayName: "Gast Georg",
+    });
+    const ownerMember = members.find((member) => member.userId === owner._id);
+
+    const tournamentId = await ownerCtx.mutation(api.tournaments.create, {
+      groupId,
+      name: "Gäste-Americano",
+      mode: "americano",
+      courts: 1,
+      playerIds: [ownerMember!._id, guestId, guest2, guest3],
+    });
+
+    await ownerCtx.mutation(api.rounds.generateRounds, { tournamentId });
+    const rounds = await ownerCtx.query(api.rounds.listByTournament, {
+      tournamentId,
+    });
+    expect(rounds.length).toBe(3);
+  });
+
+  it("rejects promoting a guest to admin", async () => {
+    const t = createTestClient();
+    await upsertUser(t, "promo-owner", { canCreateGroup: true });
+    const ownerCtx = t.withIdentity({ subject: "promo-owner" });
+    const groupId = await ownerCtx.mutation(api.groups.create, {
+      name: "Promo Group",
+      slug: "promo-group",
+    });
+    const guestId = await ownerCtx.mutation(api.groups.addGuestMember, {
+      groupId,
+      displayName: "Nur Gast",
+    });
+
+    await expect(
+      ownerCtx.mutation(api.groups.updateMemberRole, {
+        memberId: guestId,
+        role: "admin",
+      })
+    ).rejects.toThrow("Gäste können keine Admins sein");
+  });
+
+  it("lets admins rename anyone and members rename themselves only", async () => {
+    const t = createTestClient();
+    const owner = await upsertUser(t, "rename-owner", { canCreateGroup: true });
+    const memberA = await upsertUser(t, "rename-a");
+    const memberB = await upsertUser(t, "rename-b");
+    const ownerCtx = t.withIdentity({ subject: "rename-owner" });
+    const groupId = await ownerCtx.mutation(api.groups.create, {
+      name: "Rename Group",
+      slug: "rename-group",
+    });
+    await addGroupMember(t, groupId, memberA._id, "Alte A");
+    await addGroupMember(t, groupId, memberB._id, "Alte B");
+    const guestId = await ownerCtx.mutation(api.groups.addGuestMember, {
+      groupId,
+      displayName: "Alter Gast",
+    });
+
+    const members = await ownerCtx.query(api.groups.getMembers, { groupId });
+    const memberAId = members.find((m) => m.userId === memberA._id)!._id;
+    const memberBId = members.find((m) => m.userId === memberB._id)!._id;
+
+    // Admin renames another member and a guest.
+    await ownerCtx.mutation(api.groups.updateMemberDisplayName, {
+      memberId: memberBId,
+      displayName: "Neue B",
+    });
+    await ownerCtx.mutation(api.groups.updateMemberDisplayName, {
+      memberId: guestId,
+      displayName: "Neuer Gast",
+    });
+
+    // Member renames themselves.
+    const memberACtx = t.withIdentity({ subject: "rename-a" });
+    await memberACtx.mutation(api.groups.updateMemberDisplayName, {
+      memberId: memberAId,
+      displayName: "Neue A",
+    });
+
+    // Member cannot rename someone else.
+    await expect(
+      memberACtx.mutation(api.groups.updateMemberDisplayName, {
+        memberId: memberBId,
+        displayName: "Gekapert",
+      })
+    ).rejects.toThrow("Nur für Admins");
+
+    // Empty names are rejected.
+    await expect(
+      ownerCtx.mutation(api.groups.updateMemberDisplayName, {
+        memberId: memberBId,
+        displayName: "   ",
+      })
+    ).rejects.toThrow("Bitte gib einen Namen an.");
+
+    const updated = await ownerCtx.query(api.groups.getMembers, { groupId });
+    const byId = new Map(updated.map((m) => [m._id, m.displayName]));
+    expect(byId.get(memberAId)).toBe("Neue A");
+    expect(byId.get(memberBId)).toBe("Neue B");
+    expect(byId.get(guestId)).toBe("Neuer Gast");
+    expect(owner.name).toBeDefined();
+  });
+
+  it("rotates who rests each round in a six player americano", async () => {
+    const t = createTestClient();
+    await upsertUser(t, "six-owner", { canCreateGroup: true });
+    const ownerCtx = t.withIdentity({ subject: "six-owner" });
+    const groupId = await ownerCtx.mutation(api.groups.create, {
+      name: "Six Group",
+      slug: "six-group",
+    });
+    for (let i = 0; i < 5; i++) {
+      const user = await upsertUser(t, `six-player-${i}`);
+      await addGroupMember(t, groupId, user._id, `Spieler ${i}`);
+    }
+
+    const members = await ownerCtx.query(api.groups.getMembers, { groupId });
+    expect(members).toHaveLength(6);
+    const playerMemberIds = members.map((m) => m._id);
+
+    const tournamentId = await ownerCtx.mutation(api.tournaments.create, {
+      groupId,
+      name: "Sechser-Americano",
+      mode: "americano",
+      courts: 1,
+      playerIds: playerMemberIds,
+    });
+    await ownerCtx.mutation(api.rounds.generateRounds, { tournamentId });
+
+    const rounds = (
+      await ownerCtx.query(api.rounds.listByTournament, { tournamentId })
+    ).sort((a, b) => a.roundNumber - b.roundNumber);
+    expect(rounds.length).toBe(5);
+
+    const restingPerRound: Array<Array<string>> = [];
+    for (const round of rounds) {
+      const roundMatches = await ownerCtx.query(api.matches.getByRound, {
+        roundId: round._id,
+      });
+      expect(roundMatches.length).toBe(1);
+      const playing = new Set(
+        roundMatches.flatMap((m) => [...m.teamA, ...m.teamB])
+      );
+      expect(playing.size).toBe(4);
+      const resting = playerMemberIds.filter((id) => !playing.has(id));
+      expect(resting.length).toBe(2);
+      restingPerRound.push(resting);
+    }
+
+    // Rest counts stay balanced.
+    const counts = new Map<string, number>();
+    for (const roundRest of restingPerRound) {
+      for (const id of roundRest) counts.set(id, (counts.get(id) ?? 0) + 1);
+    }
+    const values = playerMemberIds.map((id) => counts.get(id) ?? 0);
+    expect(Math.max(...values) - Math.min(...values)).toBeLessThanOrEqual(1);
+
+    // Nobody rests in two consecutive rounds.
+    for (let r = 1; r < restingPerRound.length; r++) {
+      const prev = new Set(restingPerRound[r - 1]);
+      for (const id of restingPerRound[r]) {
+        expect(prev.has(id)).toBe(false);
+      }
+    }
+  });
+
+  it("keeps a guest that has played but removes an unused one", async () => {
+    const t = createTestClient();
+    const owner = await upsertUser(t, "rm-owner", { canCreateGroup: true });
+    const ownerCtx = t.withIdentity({ subject: "rm-owner" });
+    const groupId = await ownerCtx.mutation(api.groups.create, {
+      name: "Remove Group",
+      slug: "remove-group",
+    });
+
+    // Unused guest can be removed.
+    const spareGuest = await ownerCtx.mutation(api.groups.addGuestMember, {
+      groupId,
+      displayName: "Ungenutzt",
+    });
+    await ownerCtx.mutation(api.groups.removeMember, { memberId: spareGuest });
+    const afterRemoval = await ownerCtx.query(api.groups.getMembers, { groupId });
+    expect(afterRemoval.some((m) => m._id === spareGuest)).toBe(false);
+
+    // A guest referenced by a tournament cannot be removed.
+    const g1 = await ownerCtx.mutation(api.groups.addGuestMember, {
+      groupId,
+      displayName: "Gast 1",
+    });
+    const g2 = await ownerCtx.mutation(api.groups.addGuestMember, {
+      groupId,
+      displayName: "Gast 2",
+    });
+    const g3 = await ownerCtx.mutation(api.groups.addGuestMember, {
+      groupId,
+      displayName: "Gast 3",
+    });
+    const members = await ownerCtx.query(api.groups.getMembers, { groupId });
+    const ownerMember = members.find((m) => m.userId === owner._id)!._id;
+
+    const tournamentId = await ownerCtx.mutation(api.tournaments.create, {
+      groupId,
+      name: "Gast-Turnier",
+      mode: "americano",
+      courts: 1,
+      playerIds: [ownerMember, g1, g2, g3],
+    });
+    await ownerCtx.mutation(api.rounds.generateRounds, { tournamentId });
+
+    await expect(
+      ownerCtx.mutation(api.groups.removeMember, { memberId: g1 })
+    ).rejects.toThrow("Turnieren");
+  });
+
+  it("treats a group with only guests left as orphaned and deletes it", async () => {
+    const t = createTestClient();
+    await upsertUser(t, "orphan-owner", { canCreateGroup: true });
+    const ownerCtx = t.withIdentity({ subject: "orphan-owner" });
+    const groupId = await ownerCtx.mutation(api.groups.create, {
+      name: "Orphan Group",
+      slug: "orphan-group",
+    });
+    const guestId = await ownerCtx.mutation(api.groups.addGuestMember, {
+      groupId,
+      displayName: "Einsamer Gast",
+    });
+
+    // The only account holder deletes their account; a guest cannot keep the
+    // group alive, so the whole group is removed.
+    await t.mutation(internal.users.deleteFromClerk, {
+      clerkUserId: "orphan-owner",
+    });
+
+    const group = await t.run((ctx) => ctx.db.get("groups", groupId));
+    expect(group).toBeNull();
+    const guest = await t.run((ctx) => ctx.db.get("groupMembers", guestId));
+    expect(guest).toBeNull();
+  });
+
+  it("records scores and standings for a tournament that includes guests", async () => {
+    const t = createTestClient();
+    const owner = await upsertUser(t, "score-owner", { canCreateGroup: true });
+    const realPlayer = await upsertUser(t, "score-real");
+    const ownerCtx = t.withIdentity({ subject: "score-owner" });
+    const groupId = await ownerCtx.mutation(api.groups.create, {
+      name: "Score Group",
+      slug: "score-group",
+    });
+    await addGroupMember(t, groupId, realPlayer._id, "Echt Spieler");
+    const guestA = await ownerCtx.mutation(api.groups.addGuestMember, {
+      groupId,
+      displayName: "Gast Anna",
+    });
+    const guestB = await ownerCtx.mutation(api.groups.addGuestMember, {
+      groupId,
+      displayName: "Gast Ben",
+    });
+
+    const members = await ownerCtx.query(api.groups.getMembers, { groupId });
+    const ownerMember = members.find((m) => m.userId === owner._id)!._id;
+    const realMember = members.find((m) => m.userId === realPlayer._id)!._id;
+
+    const tournamentId = await ownerCtx.mutation(api.tournaments.create, {
+      groupId,
+      name: "Gemischtes Turnier",
+      mode: "americano",
+      courts: 1,
+      playerIds: [ownerMember, realMember, guestA, guestB],
+    });
+    await ownerCtx.mutation(api.rounds.generateRounds, { tournamentId });
+
+    const rounds = await ownerCtx.query(api.rounds.listByTournament, {
+      tournamentId,
+    });
+    const firstRoundMatches = await ownerCtx.query(api.matches.getByRound, {
+      roundId: rounds[0]._id,
+    });
+    const match = firstRoundMatches[0];
+
+    // The owner participates in every 4-player round and can submit.
+    await ownerCtx.mutation(api.matches.submitScore, {
+      matchId: match._id,
+      scoreA: 20,
+      scoreB: 12,
+    });
+
+    const standings = await ownerCtx.query(api.standings.getStandings, {
+      tournamentId,
+    });
+    expect(standings).toHaveLength(4);
+    const names = standings.map((s) => s.displayName);
+    expect(names).toContain("Gast Anna");
+    expect(names).toContain("Gast Ben");
+    // Each of the four players carries their team's score (2×20 + 2×12).
+    expect(standings.reduce((sum, s) => sum + s.points, 0)).toBe(64);
+    expect(standings.filter((s) => s.points === 20)).toHaveLength(2);
+  });
+
+  it("lets a super admin who is not a group member rename a member", async () => {
+    const t = createTestClient();
+    const owner = await upsertUser(t, "sa-owner", { canCreateGroup: true });
+    await upsertUser(t, "sa-super", { isSuperAdmin: true });
+    const ownerCtx = t.withIdentity({ subject: "sa-owner" });
+    const groupId = await ownerCtx.mutation(api.groups.create, {
+      name: "SA Group",
+      slug: "sa-group",
+    });
+    const members = await ownerCtx.query(api.groups.getMembers, { groupId });
+    const ownerMember = members.find((m) => m.userId === owner._id)!._id;
+
+    const superCtx = t.withIdentity({ subject: "sa-super" });
+    await superCtx.mutation(api.groups.updateMemberDisplayName, {
+      memberId: ownerMember,
+      displayName: "Von Super umbenannt",
+    });
+
+    const updated = await ownerCtx.query(api.groups.getMembers, { groupId });
+    expect(updated.find((m) => m._id === ownerMember)?.displayName).toBe(
+      "Von Super umbenannt"
+    );
+  });
+
+  it("rejects guest creation and tournament configs from unauthorized callers", async () => {
+    const t = createTestClient();
+    await upsertUser(t, "authz-owner", { canCreateGroup: true });
+    const memberUser = await upsertUser(t, "authz-member");
+    const ownerCtx = t.withIdentity({ subject: "authz-owner" });
+    const groupId = await ownerCtx.mutation(api.groups.create, {
+      name: "Authz Group",
+      slug: "authz-group",
+    });
+    await addGroupMember(t, groupId, memberUser._id, "Nur Mitglied");
+
+    // A non-admin member cannot add guests.
+    const memberCtx = t.withIdentity({ subject: "authz-member" });
+    await expect(
+      memberCtx.mutation(api.groups.addGuestMember, {
+        groupId,
+        displayName: "Verbotener Gast",
+      })
+    ).rejects.toThrow("Nur für Admins");
+
+    // Two courts require at least eight players — enforced at the mutation layer.
+    const g1 = await ownerCtx.mutation(api.groups.addGuestMember, {
+      groupId,
+      displayName: "G1",
+    });
+    const g2 = await ownerCtx.mutation(api.groups.addGuestMember, {
+      groupId,
+      displayName: "G2",
+    });
+    const members = await ownerCtx.query(api.groups.getMembers, { groupId });
+    const ownerMember = members.find((m) => m.role === "admin")!._id;
+    const memberId = members.find((m) => m.userId === memberUser._id)!._id;
+
+    await expect(
+      ownerCtx.mutation(api.tournaments.create, {
+        groupId,
+        name: "Zu viele Plätze",
+        mode: "americano",
+        courts: 2,
+        playerIds: [ownerMember, memberId, g1, g2],
+      })
+    ).rejects.toThrow("2 Plätze");
   });
 });

@@ -25,7 +25,9 @@ export default defineSchema({
 
   groupMembers: defineTable({
     groupId: v.id("groups"),
-    userId: v.id("users"),
+    // Guests (players without an account) have no userId and isGuest === true.
+    userId: v.optional(v.id("users")),
+    isGuest: v.optional(v.boolean()),
     role: v.union(v.literal("admin"), v.literal("member")),
     displayName: v.string(),
   })

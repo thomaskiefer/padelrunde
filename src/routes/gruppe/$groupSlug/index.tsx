@@ -10,6 +10,7 @@ import {
 } from "~/lib/groupPermissions";
 import { Button } from "~/components/ui/button";
 import { Badge } from "~/components/ui/badge";
+import { Input } from "~/components/ui/input";
 import { cn } from "~/lib/utils";
 import {
   modeLabels,
@@ -35,8 +36,12 @@ function GroupDashboard() {
     convexQuery(api.groups.getBySlug, { slug: groupSlug })
   );
   const leaveGroup = useMutation(api.groups.leaveGroup);
+  const updateMemberDisplayName = useMutation(api.groups.updateMemberDisplayName);
   const [actionError, setActionError] = useState("");
   const [isLeavingGroup, setIsLeavingGroup] = useState(false);
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [nameValue, setNameValue] = useState("");
+  const [savingName, setSavingName] = useState(false);
   const { data: members = [], isLoading: membersLoading } = useQuery({
     ...convexQuery(api.groups.getMembers, {
       groupId: (group?._id ?? "missing") as any,
@@ -78,6 +83,31 @@ function GroupDashboard() {
     }
   };
 
+  const startEditName = () => {
+    setActionError("");
+    setNameValue(currentMembership?.displayName ?? "");
+    setIsEditingName(true);
+  };
+
+  const handleSaveName = async () => {
+    if (!currentMembership) return;
+    const name = nameValue.trim();
+    if (!name) return;
+    setActionError("");
+    setSavingName(true);
+    try {
+      await updateMemberDisplayName({
+        memberId: currentMembership._id as any,
+        displayName: name,
+      });
+      setIsEditingName(false);
+    } catch (err: any) {
+      setActionError(err.message ?? "Name konnte nicht geändert werden");
+    } finally {
+      setSavingName(false);
+    }
+  };
+
   return (
     <div className="mx-auto max-w-5xl p-4 space-y-8 animate-fade-in-up">
       {/* Page header */}
@@ -115,6 +145,15 @@ function GroupDashboard() {
                 </Button>
               </>
             )}
+            {currentMembership && !isEditingName && (
+              <button
+                type="button"
+                onClick={startEditName}
+                className="text-[10px] uppercase tracking-[0.2em] font-bold text-gray-400 hover:text-brand-red transition-colors min-h-[44px] px-2"
+              >
+                Namen ändern
+              </button>
+            )}
             {currentMembership && !canManage && (
               <button
                 type="button"
@@ -125,6 +164,38 @@ function GroupDashboard() {
                 {isLeavingGroup ? "Verlässt..." : "Gruppe verlassen"}
               </button>
             )}
+          </div>
+        )}
+
+        {isEditingName && currentMembership && (
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center rounded-xl border border-gray-100 bg-white p-3 shadow-sm">
+            <Input
+              value={nameValue}
+              onChange={(event) => setNameValue(event.target.value)}
+              placeholder="Dein Name in dieser Gruppe"
+              className="h-11 min-w-0 flex-1"
+              maxLength={60}
+              autoFocus
+              aria-label="Dein Anzeigename"
+            />
+            <div className="flex gap-2">
+              <Button
+                variant="brand"
+                size="touchLg"
+                onClick={handleSaveName}
+                disabled={savingName || !nameValue.trim()}
+              >
+                {savingName ? "Speichert..." : "Speichern"}
+              </Button>
+              <Button
+                variant="brandOutline"
+                size="touchLg"
+                onClick={() => setIsEditingName(false)}
+                disabled={savingName}
+              >
+                Abbrechen
+              </Button>
+            </div>
           </div>
         )}
 
@@ -161,6 +232,7 @@ function GroupMembers({
     role: "admin" | "member";
     displayName: string;
     avatarUrl?: string;
+    isGuest?: boolean;
   }>;
 }) {
   return (
@@ -196,6 +268,9 @@ function GroupMembers({
             {m.displayName}
             {m.role === "admin" && (
               <span className="opacity-70">Admin</span>
+            )}
+            {m.isGuest && (
+              <span className="opacity-70">Gast</span>
             )}
           </div>
         ))}

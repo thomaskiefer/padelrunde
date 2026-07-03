@@ -261,7 +261,9 @@ export const deleteFromClerk = internalMutation({
         await Promise.all(
           groupMembers.map(async (member) => {
             if (member.userId === user._id || member.role !== "admin") return false;
-            const memberUser = await ctx.db.get("users", member.userId);
+            const memberUser = member.userId
+              ? await ctx.db.get("users", member.userId)
+              : null;
             return !!memberUser;
           })
         )
@@ -273,7 +275,9 @@ export const deleteFromClerk = internalMutation({
         | undefined;
       for (const member of groupMembers) {
         if (member.userId === user._id) continue;
-        const memberUser = await ctx.db.get("users", member.userId);
+        const memberUser = member.userId
+          ? await ctx.db.get("users", member.userId)
+          : null;
         if (!memberUser) continue;
         replacement = member;
         break;
@@ -300,7 +304,9 @@ export const deleteFromClerk = internalMutation({
         await Promise.all(
           remainingMembers.map(async (member) => {
             if (member.userId === user._id) return false;
-            const memberUser = await ctx.db.get("users", member.userId);
+            const memberUser = member.userId
+              ? await ctx.db.get("users", member.userId)
+              : null;
             return !!memberUser;
           })
         )

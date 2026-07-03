@@ -43,6 +43,8 @@ export function GroupSettings() {
   const revokeInviteToken = useMutation(api.groups.revokeInviteToken);
   const deleteInviteToken = useMutation(api.groups.deleteInviteToken);
   const deleteGroup = useMutation(api.groups.deleteGroup);
+  const addGuestMember = useMutation(api.groups.addGuestMember);
+  const updateMemberDisplayName = useMutation(api.groups.updateMemberDisplayName);
   const [actionError, setActionError] = useState("");
   const [actionLoadingMemberId, setActionLoadingMemberId] = useState<string | null>(null);
   const [removingMemberId, setRemovingMemberId] = useState<string | null>(null);
@@ -54,6 +56,12 @@ export function GroupSettings() {
   const [copiedInviteId, setCopiedInviteId] = useState<string | null>(null);
   const [groupError, setGroupError] = useState("");
   const [isDeletingGroup, setIsDeletingGroup] = useState(false);
+  const [guestName, setGuestName] = useState("");
+  const [isAddingGuest, setIsAddingGuest] = useState(false);
+  const [guestError, setGuestError] = useState("");
+  const [editingMemberId, setEditingMemberId] = useState<string | null>(null);
+  const [editNameValue, setEditNameValue] = useState("");
+  const [savingRename, setSavingRename] = useState(false);
   const [latestInvite, setLatestInvite] = useState<{
     inviteTokenId: string;
     token: string;
@@ -205,6 +213,48 @@ export function GroupSettings() {
       setActionError(err.message ?? "Mitglied konnte nicht entfernt werden.");
     } finally {
       setRemovingMemberId(null);
+    }
+  };
+
+  const handleAddGuest = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setGuestError("");
+    const name = guestName.trim();
+    if (!name) return;
+    setIsAddingGuest(true);
+    try {
+      await addGuestMember({ groupId: group._id, displayName: name });
+      setGuestName("");
+    } catch (err: any) {
+      setGuestError(err.message ?? "Gast konnte nicht hinzugefügt werden.");
+    } finally {
+      setIsAddingGuest(false);
+    }
+  };
+
+  const startRename = (memberId: string, currentName: string) => {
+    setActionError("");
+    setEditingMemberId(memberId);
+    setEditNameValue(currentName);
+  };
+
+  const cancelRename = () => {
+    setEditingMemberId(null);
+    setEditNameValue("");
+  };
+
+  const handleRename = async (memberId: string) => {
+    const name = editNameValue.trim();
+    if (!name) return;
+    setActionError("");
+    setSavingRename(true);
+    try {
+      await updateMemberDisplayName({ memberId: memberId as any, displayName: name });
+      cancelRename();
+    } catch (err: any) {
+      setActionError(err.message ?? "Name konnte nicht geändert werden.");
+    } finally {
+      setSavingRename(false);
     }
   };
 
@@ -428,6 +478,51 @@ export function GroupSettings() {
         <h3 className="section-title-accent font-display text-sm uppercase tracking-widest text-brand-navy mb-4">
           Mitglieder verwalten
         </h3>
+
+        <form
+          onSubmit={handleAddGuest}
+          className="mb-4 rounded-xl border border-gray-100 bg-white p-4 shadow-sm space-y-3"
+        >
+          <div className="space-y-1">
+            <Label
+              htmlFor="guest-name"
+              className="text-[10px] uppercase tracking-widest font-bold text-gray-400"
+            >
+              Gastspieler hinzufügen
+            </Label>
+            <p className="text-xs text-gray-500">
+              Für Mitspieler ohne Konto. Sie können ausgewählt werden wie alle
+              anderen und jederzeit wieder entfernt werden.
+            </p>
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Input
+              id="guest-name"
+              value={guestName}
+              onChange={(event) => setGuestName(event.target.value)}
+              placeholder="Name des Gastes"
+              className="h-12 min-w-0 flex-1"
+              maxLength={60}
+            />
+            <Button
+              type="submit"
+              variant="brand"
+              size="touchLg"
+              className="shrink-0"
+              disabled={isAddingGuest || !guestName.trim()}
+            >
+              {isAddingGuest ? "Wird hinzugefügt..." : "Gast hinzufügen"}
+            </Button>
+          </div>
+          {guestError && (
+            <div className="bg-red-50 border-l-2 border-red-500 p-3" role="alert">
+              <p className="text-[10px] font-bold text-red-700 uppercase tracking-widest">
+                {guestError}
+              </p>
+            </div>
+          )}
+        </form>
+
         {actionError && (
           <div className="mb-3 bg-red-50 border-l-2 border-red-500 p-3" role="alert">
             <p className="text-[10px] font-bold text-red-700 uppercase tracking-widest">{actionError}</p>
@@ -458,33 +553,80 @@ export function GroupSettings() {
                   const removeBlockReason = getRemoveGroupMemberBlockReason(members, m);
                   const canRemove = canRemoveGroupMember(members, m);
                   const isMe = m.userId === me?._id;
+                  const isEditing = editingMemberId === m._id;
                   return (
                     <tr key={m._id} className={cn("animate-slide-in-left hover:bg-gray-50/50 transition-colors", isMe && "bg-brand-navy/[0.03]")} style={{ animationDelay: `${Math.min(i * 0.05, 0.3)}s` }}>
-                      <td className="px-4 py-4 font-semibold text-brand-navy text-sm max-w-[200px] truncate">
-                        {m.displayName}
-                        {isMe && <span className="ml-2 text-[10px] uppercase tracking-widest font-bold text-gray-400">(Du)</span>}
-                      </td>
-                      <td className="px-4 py-4">
-                        <Badge variant={m.role === "admin" ? "brandRed" : "muted"} size="xs">
-                          {m.role === "admin" ? "Admin" : "Mitglied"}
-                        </Badge>
-                      </td>
-                      <td className="px-4 py-4">
-                        <div className="flex flex-wrap items-center gap-2">
-                          {!canToggleRole ? (
-                            <Badge variant="muted" size="xs">Mind. 1 Admin</Badge>
-                          ) : (
+                      <td className="px-4 py-4 max-w-[280px]">
+                        {isEditing ? (
+                          <div className="flex items-center gap-2">
+                            <Input
+                              value={editNameValue}
+                              onChange={(event) => setEditNameValue(event.target.value)}
+                              className="h-9 min-w-0"
+                              maxLength={60}
+                              autoFocus
+                              aria-label="Neuer Anzeigename"
+                            />
+                            <Button
+                              variant="brand"
+                              size="sm"
+                              className="shrink-0"
+                              onClick={() => handleRename(m._id)}
+                              disabled={savingRename || !editNameValue.trim()}
+                            >
+                              {savingRename ? "..." : "Speichern"}
+                            </Button>
                             <Button
                               variant="brandOutline"
                               size="sm"
-                              aria-label={`${m.displayName} ${m.role === "admin" ? "zum Mitglied" : "zum Admin"} machen`}
-                              onClick={() => handleRoleToggle(m._id, m.role)}
-                              disabled={actionLoadingMemberId === m._id}
+                              className="shrink-0"
+                              onClick={cancelRename}
+                              disabled={savingRename}
                             >
-                              {m.role === "admin"
-                                ? "Zum Mitglied machen"
-                                : "Zum Admin machen"}
+                              Abbrechen
                             </Button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="font-semibold text-brand-navy text-sm truncate">{m.displayName}</span>
+                            {isMe && <span className="text-[10px] uppercase tracking-widest font-bold text-gray-400 shrink-0">(Du)</span>}
+                            <button
+                              type="button"
+                              onClick={() => startRename(m._id, m.displayName)}
+                              className="ml-auto text-[10px] uppercase tracking-widest font-bold text-gray-400 hover:text-brand-red transition-colors shrink-0"
+                            >
+                              Umbenennen
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-4 py-4">
+                        {m.isGuest ? (
+                          <Badge variant="muted" size="xs">Gast</Badge>
+                        ) : (
+                          <Badge variant={m.role === "admin" ? "brandRed" : "muted"} size="xs">
+                            {m.role === "admin" ? "Admin" : "Mitglied"}
+                          </Badge>
+                        )}
+                      </td>
+                      <td className="px-4 py-4">
+                        <div className="flex flex-wrap items-center gap-2">
+                          {!m.isGuest && (
+                            !canToggleRole ? (
+                              <Badge variant="muted" size="xs">Mind. 1 Admin</Badge>
+                            ) : (
+                              <Button
+                                variant="brandOutline"
+                                size="sm"
+                                aria-label={`${m.displayName} ${m.role === "admin" ? "zum Mitglied" : "zum Admin"} machen`}
+                                onClick={() => handleRoleToggle(m._id, m.role)}
+                                disabled={actionLoadingMemberId === m._id}
+                              >
+                                {m.role === "admin"
+                                  ? "Zum Mitglied machen"
+                                  : "Zum Admin machen"}
+                              </Button>
+                            )
                           )}
                           {!isMe && (
                             canRemove ? (
@@ -524,6 +666,7 @@ export function GroupSettings() {
               const removeBlockReason = getRemoveGroupMemberBlockReason(members, m);
               const canRemove = canRemoveGroupMember(members, m);
               const isMe = m.userId === me?._id;
+              const isEditing = editingMemberId === m._id;
               return (
                 <div
                   key={m._id}
@@ -535,47 +678,92 @@ export function GroupSettings() {
                       {m.displayName}
                       {isMe && <span className="ml-1.5 text-[10px] uppercase tracking-widest font-bold text-gray-400">(Du)</span>}
                     </span>
-                    <Badge variant={m.role === "admin" ? "brandRed" : "muted"} size="xs" className="shrink-0">
-                      {m.role === "admin" ? "Admin" : "Mitglied"}
-                    </Badge>
-                  </div>
-                  <div className="grid gap-2">
-                    <Button
-                      variant="brandOutline"
-                      size="touchLg"
-                      className="w-full"
-                      aria-label={`${m.displayName} ${m.role === "admin" ? "zum Mitglied" : "zum Admin"} machen`}
-                      onClick={() => handleRoleToggle(m._id, m.role)}
-                      disabled={
-                        actionLoadingMemberId === m._id || !canToggleRole
-                      }
-                    >
-                      {!canToggleRole
-                        ? "Mind. 1 Admin"
-                        : m.role === "admin"
-                          ? "Zum Mitglied machen"
-                          : "Zum Admin machen"}
-                    </Button>
-                    {!isMe && (
-                      <Button
-                        variant="brandDestructive"
-                        size="touchLg"
-                        className="w-full"
-                        onClick={() => handleRemoveMember(m._id, m.displayName)}
-                        disabled={removingMemberId === m._id || !canRemove}
-                      >
-                        {!canRemove
-                          ? removeBlockReason === "referenced"
-                            ? "Im Turnier"
-                            : removeBlockReason === "last-member"
-                              ? "Letztes Mitglied"
-                              : "Mind. 1 Admin"
-                          : removingMemberId === m._id
-                            ? "Entfernt..."
-                            : "Mitglied entfernen"}
-                      </Button>
+                    {m.isGuest ? (
+                      <Badge variant="muted" size="xs" className="shrink-0">Gast</Badge>
+                    ) : (
+                      <Badge variant={m.role === "admin" ? "brandRed" : "muted"} size="xs" className="shrink-0">
+                        {m.role === "admin" ? "Admin" : "Mitglied"}
+                      </Badge>
                     )}
                   </div>
+                  {isEditing ? (
+                    <div className="grid gap-2">
+                      <Input
+                        value={editNameValue}
+                        onChange={(event) => setEditNameValue(event.target.value)}
+                        className="h-11"
+                        maxLength={60}
+                        autoFocus
+                        aria-label="Neuer Anzeigename"
+                      />
+                      <div className="grid grid-cols-2 gap-2">
+                        <Button
+                          variant="brand"
+                          size="touchLg"
+                          onClick={() => handleRename(m._id)}
+                          disabled={savingRename || !editNameValue.trim()}
+                        >
+                          {savingRename ? "..." : "Speichern"}
+                        </Button>
+                        <Button
+                          variant="brandOutline"
+                          size="touchLg"
+                          onClick={cancelRename}
+                          disabled={savingRename}
+                        >
+                          Abbrechen
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="grid gap-2">
+                      <Button
+                        variant="brandOutline"
+                        size="touchLg"
+                        className="w-full"
+                        onClick={() => startRename(m._id, m.displayName)}
+                      >
+                        Umbenennen
+                      </Button>
+                      {!m.isGuest && (
+                        <Button
+                          variant="brandOutline"
+                          size="touchLg"
+                          className="w-full"
+                          aria-label={`${m.displayName} ${m.role === "admin" ? "zum Mitglied" : "zum Admin"} machen`}
+                          onClick={() => handleRoleToggle(m._id, m.role)}
+                          disabled={
+                            actionLoadingMemberId === m._id || !canToggleRole
+                          }
+                        >
+                          {!canToggleRole
+                            ? "Mind. 1 Admin"
+                            : m.role === "admin"
+                              ? "Zum Mitglied machen"
+                              : "Zum Admin machen"}
+                        </Button>
+                      )}
+                      {!isMe && (
+                        <Button
+                          variant="brandDestructive"
+                          size="touchLg"
+                          className="w-full"
+                          onClick={() => handleRemoveMember(m._id, m.displayName)}
+                          disabled={removingMemberId === m._id || !canRemove}
+                        >
+                          {!canRemove
+                            ? removeBlockReason === "referenced"
+                              ? "Im Turnier"
+                              : removeBlockReason === "last-member"
+                                ? "Letztes Mitglied"
+                                : "Mind. 1 Admin"
+                            : removingMemberId === m._id
+                              ? "Entfernt..."
+                              : "Mitglied entfernen"}
+                        </Button>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })()

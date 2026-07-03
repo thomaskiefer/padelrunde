@@ -23,7 +23,9 @@ export async function hasActiveGroupMembers(
     .collect();
 
   const activeMembers = await Promise.all(
-    groupMembers.map(async (member) => ctx.db.get("users", member.userId))
+    groupMembers.map(async (member) =>
+      member.userId ? ctx.db.get("users", member.userId) : null
+    )
   );
   return activeMembers.some(Boolean);
 }

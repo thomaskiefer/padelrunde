@@ -108,6 +108,9 @@ export function TournamentView() {
   };
 
   const winner = resolveTournamentWinner(tournament.mode, standings, rounds, allMatches);
+  const playerNamesById = new Map(
+    members.map((member) => [member._id, member.displayName] as const)
+  );
 
   return (
     <div className="mx-auto max-w-5xl p-4 space-y-8 animate-fade-in-up">
@@ -232,8 +235,10 @@ export function TournamentView() {
             <RoundsDisplay
               rounds={rounds}
               viewerTournamentMemberIds={viewerTournamentMemberIds}
+              allPlayerIds={tournament.playerIds}
+              playerNamesById={playerNamesById}
             />
-            
+
           </section>
         </div>
       )}
@@ -244,6 +249,8 @@ export function TournamentView() {
 function RoundsDisplay({
   rounds,
   viewerTournamentMemberIds,
+  allPlayerIds,
+  playerNamesById,
 }: {
   rounds: Array<{
     _id: Id<"rounds">;
@@ -251,6 +258,8 @@ function RoundsDisplay({
     phase: string;
   }>;
   viewerTournamentMemberIds: Set<Id<"groupMembers">>;
+  allPlayerIds: Array<Id<"groupMembers">>;
+  playerNamesById: Map<string, string>;
 }) {
   return (
     <div className="space-y-8">
@@ -270,6 +279,8 @@ function RoundsDisplay({
               title={title}
               isKnockout={isKnockout}
               viewerTournamentMemberIds={viewerTournamentMemberIds}
+              allPlayerIds={round.phase === "preliminary" ? allPlayerIds : []}
+              playerNamesById={playerNamesById}
             />
           );
         })}
@@ -282,14 +293,31 @@ function RoundSection({
   title,
   isKnockout,
   viewerTournamentMemberIds,
+  allPlayerIds,
+  playerNamesById,
 }: {
   roundId: Id<"rounds">;
   title: string;
   isKnockout: boolean;
   viewerTournamentMemberIds: Set<Id<"groupMembers">>;
+  allPlayerIds: Array<Id<"groupMembers">>;
+  playerNamesById: Map<string, string>;
 }) {
   const { data: matches } = useSuspenseQuery(
     convexQuery(api.matches.getByRound, { roundId })
+  );
+
+  const playingIds = new Set(
+    matches.flatMap((match) => [...match.teamA, ...match.teamB])
+  );
+  const restingIds = allPlayerIds.filter((memberId) => !playingIds.has(memberId));
+  // Only show the pause line once every resting name is known, so it never
+  // flashes "?" while the members query is still loading.
+  const restingNamesResolved = restingIds.every((memberId) =>
+    playerNamesById.has(memberId)
+  );
+  const restingNames = restingIds.map(
+    (memberId) => playerNamesById.get(memberId) ?? "?"
   );
 
   return (
@@ -318,6 +346,11 @@ function RoundSection({
           />
         ))}
       </div>
+      {restingIds.length > 0 && restingNamesResolved && (
+        <p className="text-[10px] uppercase tracking-widest font-bold text-gray-400">
+          Pause: <span className="text-brand-navy/60">{restingNames.join(", ")}</span>
+        </p>
+      )}
     </div>
   );
 }

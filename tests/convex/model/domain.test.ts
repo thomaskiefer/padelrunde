@@ -145,6 +145,85 @@ describe("Pairing Algorithm", () => {
   });
 });
 
+// ─── Group 1b: Resting Rotation (counts not divisible by 4) ──
+
+function restingByRound(
+  n: number,
+  rounds: Array<Array<{ teamA: [number, number]; teamB: [number, number] }>>
+): Array<Array<number>> {
+  return rounds.map((round) => {
+    const playing = new Set(round.flatMap((m) => [...m.teamA, ...m.teamB]));
+    return Array.from({ length: n }, (_, i) => i).filter(
+      (i) => !playing.has(i)
+    );
+  });
+}
+
+describe("Resting Rotation", () => {
+  test("produces N-1 rounds for 5, 6 and 7 players", () => {
+    expect(generateAmericanoPairings(5).length).toBe(4);
+    expect(generateAmericanoPairings(6).length).toBe(5);
+    expect(generateAmericanoPairings(7).length).toBe(6);
+  });
+
+  test("each round has exactly one match with 4 distinct players", () => {
+    for (const n of [5, 6, 7]) {
+      const rounds = generateAmericanoPairings(n);
+      for (const round of rounds) {
+        expect(round.length).toBe(1);
+        const players = [...round[0].teamA, ...round[0].teamB];
+        expect(new Set(players).size).toBe(4);
+      }
+    }
+  });
+
+  test("exactly (N mod 4) players rest each round", () => {
+    for (const n of [5, 6, 7]) {
+      const resting = restingByRound(n, generateAmericanoPairings(n));
+      for (const roundRest of resting) {
+        expect(roundRest.length).toBe(n % 4);
+      }
+    }
+  });
+
+  test("rest counts stay balanced (differ by at most one)", () => {
+    for (const n of [5, 6, 7]) {
+      const resting = restingByRound(n, generateAmericanoPairings(n));
+      const counts = Array(n).fill(0);
+      for (const roundRest of resting) {
+        for (const p of roundRest) counts[p]++;
+      }
+      expect(Math.max(...counts) - Math.min(...counts)).toBeLessThanOrEqual(1);
+    }
+  });
+
+  test("nobody rests in two consecutive rounds", () => {
+    for (const n of [5, 6, 7]) {
+      const resting = restingByRound(n, generateAmericanoPairings(n));
+      for (let r = 1; r < resting.length; r++) {
+        const prev = new Set(resting[r - 1]);
+        for (const p of resting[r]) {
+          expect(prev.has(p)).toBe(false);
+        }
+      }
+    }
+  });
+
+  test("6 players never repeat a partnership", () => {
+    const rounds = generateAmericanoPairings(6);
+    const matrix = buildPartnerMatrix(6, rounds);
+    for (let i = 0; i < 6; i++) {
+      for (let j = i + 1; j < 6; j++) {
+        expect(matrix[i][j]).toBeLessThanOrEqual(1);
+      }
+    }
+  });
+
+  test("resting rotation is deterministic", () => {
+    expect(generateAmericanoPairings(6)).toEqual(generateAmericanoPairings(6));
+  });
+});
+
 // ─── Group 2: Score Validation ───────────────────────────
 
 describe("Score Validation", () => {
@@ -337,12 +416,20 @@ describe("Tournament Config Validation", () => {
     expect(validateTournamentConfig("americano", 3, 1).valid).toBe(false);
   });
 
-  test("americano mode rejects 5 players (not divisible by 4)", () => {
-    expect(validateTournamentConfig("americano", 5, 1).valid).toBe(false);
+  test("americano mode accepts 5, 6 and 7 players", () => {
+    expect(validateTournamentConfig("americano", 5, 1).valid).toBe(true);
+    expect(validateTournamentConfig("americano", 6, 1).valid).toBe(true);
+    expect(validateTournamentConfig("americano", 7, 1).valid).toBe(true);
   });
 
   test("americano mode rejects 9 players", () => {
     expect(validateTournamentConfig("americano", 9, 1).valid).toBe(false);
+  });
+
+  test("2 courts require at least 8 players", () => {
+    expect(validateTournamentConfig("americano", 6, 2).valid).toBe(false);
+    expect(validateTournamentConfig("americano", 7, 2).valid).toBe(false);
+    expect(validateTournamentConfig("americano", 8, 2).valid).toBe(true);
   });
 
   test("cup mode requires exactly 8 players", () => {

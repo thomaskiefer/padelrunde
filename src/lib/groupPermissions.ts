@@ -7,8 +7,9 @@ type Viewer = {
 
 type GroupMember = {
   _id?: string;
-  userId: string;
+  userId?: string;
   role: "admin" | "member";
+  isGuest?: boolean;
   isReferenced?: boolean;
 };
 

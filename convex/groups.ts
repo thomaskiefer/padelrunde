@@ -57,7 +57,7 @@ async function getMembershipsWithUsers(
   return await Promise.all(
     members.map(async (member) => ({
       member,
-      user: await ctx.db.get("users", member.userId),
+      user: member.userId ? await ctx.db.get("users", member.userId) : null,
     }))
   );
 }
@@ -68,11 +68,14 @@ async function listActiveMembers(
 ) {
   const referencedMemberIds = await listReferencedMembershipIds(ctx, groupId);
   const memberships = await getMembershipsWithUsers(ctx, groupId);
+  // Show account members and guests. Hide "ghosts" — memberships whose user has
+  // been deleted but that are kept only for tournament history.
   return memberships
-    .filter((entry) => entry.user)
+    .filter((entry) => entry.user || entry.member.isGuest)
     .map(({ member, user }) => ({
       ...member,
-      avatarUrl: user!.avatarUrl,
+      isGuest: member.isGuest ?? false,
+      avatarUrl: user?.avatarUrl,
       isReferenced: referencedMemberIds.has(member._id),
     }));
 }
@@ -775,6 +778,59 @@ export const addMember = internalMutation({
   },
 });
 
+export const addGuestMember = mutation({
+  args: {
+    groupId: v.id("groups"),
+    displayName: v.string(),
+  },
+  handler: async (ctx, { groupId, displayName }) => {
+    await requireGroupAdmin(ctx, groupId);
+    const trimmedDisplayName = displayName.trim();
+    if (!trimmedDisplayName) {
+      throw new ConvexError("Bitte gib einen Namen an.");
+    }
+
+    return ctx.db.insert("groupMembers", {
+      groupId,
+      isGuest: true,
+      role: "member",
+      displayName: trimmedDisplayName,
+    });
+  },
+});
+
+export const updateMemberDisplayName = mutation({
+  args: {
+    memberId: v.id("groupMembers"),
+    displayName: v.string(),
+  },
+  handler: async (ctx, { memberId, displayName }) => {
+    const member = await ctx.db.get("groupMembers", memberId);
+    if (!member) throw new ConvexError("Mitglied nicht gefunden");
+
+    const trimmedDisplayName = displayName.trim();
+    if (!trimmedDisplayName) {
+      throw new ConvexError("Bitte gib einen Namen an.");
+    }
+
+    const user = await requireAuth(ctx);
+    const isSelf = Boolean(member.userId && member.userId === user._id);
+    if (isSelf) {
+      // Members may rename themselves; the group must still be active.
+      if (!(await hasActiveMembers(ctx, member.groupId))) {
+        throw new ConvexError("Gruppe nicht gefunden");
+      }
+    } else {
+      // Otherwise only group admins (and super admins) may rename.
+      await requireGroupAdmin(ctx, member.groupId);
+    }
+
+    await ctx.db.patch("groupMembers", memberId, {
+      displayName: trimmedDisplayName,
+    });
+  },
+});
+
 export const updateMemberRole = mutation({
   args: {
     memberId: v.id("groupMembers"),
@@ -784,6 +840,10 @@ export const updateMemberRole = mutation({
     const member = await ctx.db.get("groupMembers", memberId);
     if (!member) throw new ConvexError("Mitglied nicht gefunden");
     await requireGroupAdmin(ctx, member.groupId);
+
+    if (member.isGuest && role === "admin") {
+      throw new ConvexError("Gäste können keine Admins sein");
+    }
 
     if (member.role === "admin" && role === "member") {
       const admins = await ctx.db
@@ -795,7 +855,9 @@ export const updateMemberRole = mutation({
       const activeAdminMemberships = (
         await Promise.all(
           adminMemberships.map(async (adminMembership) => {
-            const adminUser = await ctx.db.get("users", adminMembership.userId);
+            const adminUser = adminMembership.userId
+              ? await ctx.db.get("users", adminMembership.userId)
+              : null;
             return adminUser ? adminMembership : null;
           })
         )

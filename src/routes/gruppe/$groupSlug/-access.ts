@@ -6,7 +6,7 @@ type Viewer = {
 } | null | undefined;
 
 type GroupMember = {
-  userId: string;
+  userId?: string;
   role: "admin" | "member";
 };
 

@@ -77,8 +77,10 @@ export const create = mutation({
       playerIds.map(async (memberId) => {
         const member = await ctx.db.get("groupMembers", memberId);
         if (!member || member.groupId !== groupId) return false;
-        const memberUser = await ctx.db.get("users", member.userId);
-        return Boolean(memberUser);
+        if (member.isGuest) return true;
+        return member.userId
+          ? Boolean(await ctx.db.get("users", member.userId))
+          : false;
       })
     );
     const hasInvalidMember = memberValidity.some((isValid) => !isValid);

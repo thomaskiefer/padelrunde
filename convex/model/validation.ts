@@ -56,6 +56,11 @@ export type ConfigValidationResult =
   | { valid: true }
   | { valid: false; error: string };
 
+// Highest number of courts that can be filled at once (4 players per court).
+export function maxCourtsForPlayers(playerCount: number): number {
+  return Math.max(1, Math.floor(playerCount / 4));
+}
+
 export function validateTournamentConfig(
   mode: TournamentMode,
   playerCount: number,
@@ -64,16 +69,17 @@ export function validateTournamentConfig(
   if (courts < 1 || courts > 2) {
     return { valid: false, error: "1 oder 2 Plätze erlaubt" };
   }
-  if (mode === "cup" && playerCount !== 8) {
-    return { valid: false, error: "Cup-Modus erfordert genau 8 Spieler" };
-  }
-  if (playerCount < 4 || playerCount > 8) {
+  if (mode === "cup") {
+    if (playerCount !== 8) {
+      return { valid: false, error: "Cup-Modus erfordert genau 8 Spieler" };
+    }
+  } else if (playerCount < 4 || playerCount > 8) {
     return { valid: false, error: "4 bis 8 Spieler erforderlich" };
   }
-  if (playerCount % 4 !== 0) {
+  if (courts > maxCourtsForPlayers(playerCount)) {
     return {
       valid: false,
-      error: "Spieleranzahl muss durch 4 teilbar sein",
+      error: "Für 2 Plätze werden mindestens 8 Spieler benötigt",
     };
   }
   return { valid: true };
