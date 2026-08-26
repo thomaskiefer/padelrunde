@@ -1,4 +1,5 @@
-// Pure algorithm: generates round-robin partner pairings for N players.
+// Pure algorithm: generates Americano pairings for N players (partners rotate,
+// every partnership at most once, every opponent at most twice).
 // Returns array of rounds, each containing matches with player indices.
 //
 // When N is divisible by 4 everyone plays every round. When it is not, a fixed
@@ -6,6 +7,133 @@
 // rest counts stay balanced (they differ by at most one across the whole
 // schedule) and nobody rests in two consecutive rounds when that is avoidable.
 export function generateAmericanoPairings(
+  n: number
+): Array<Array<{ teamA: [number, number]; teamB: [number, number] }>> {
+  // First try an exact search: every partnership at most once and every
+  // opponent at most twice. For 4–8 players this is always satisfiable and
+  // the search finishes instantly. Fall back to the greedy heuristic only if
+  // the search fails (larger N).
+  return (
+    searchBalancedPairings(n, MAX_PARTNER_REPEATS, MAX_OPPONENT_REPEATS) ??
+    generateGreedyPairings(n)
+  );
+}
+
+const MAX_PARTNER_REPEATS = 1;
+const MAX_OPPONENT_REPEATS = 2;
+const SEARCH_NODE_LIMIT = 200_000;
+
+type Match = { teamA: [number, number]; teamB: [number, number] };
+
+// Depth-first search over rounds. Who rests each round follows the same
+// deterministic rotation as the greedy algorithm; within a round all ways of
+// grouping the available players into matches are explored in a fixed order,
+// so the result is deterministic.
+export function searchBalancedPairings(
+  n: number,
+  maxPartner: number,
+  maxOpponent: number
+): Array<Array<Match>> | null {
+  const totalRounds = n - 1;
+  const restPerRound = ((n % 4) + 4) % 4;
+  const partnerCount: Array<Array<number>> = Array.from({ length: n }, () =>
+    Array(n).fill(0)
+  );
+  const opponentCount: Array<Array<number>> = Array.from({ length: n }, () =>
+    Array(n).fill(0)
+  );
+  const restCount: Array<number> = Array(n).fill(0);
+  const rounds: Array<Array<Match>> = [];
+  let nodes = 0;
+
+  const apply = (m: Match, delta: number) => {
+    partnerCount[m.teamA[0]][m.teamA[1]] += delta;
+    partnerCount[m.teamA[1]][m.teamA[0]] += delta;
+    partnerCount[m.teamB[0]][m.teamB[1]] += delta;
+    partnerCount[m.teamB[1]][m.teamB[0]] += delta;
+    for (const a of m.teamA) {
+      for (const b of m.teamB) {
+        opponentCount[a][b] += delta;
+        opponentCount[b][a] += delta;
+      }
+    }
+  };
+
+  const allowed = (m: Match) =>
+    partnerCount[m.teamA[0]][m.teamA[1]] < maxPartner &&
+    partnerCount[m.teamB[0]][m.teamB[1]] < maxPartner &&
+    m.teamA.every((a) =>
+      m.teamB.every((b) => opponentCount[a][b] < maxOpponent)
+    );
+
+  // Fill one round: the lowest available player is anchored into a match with
+  // three others (avoids symmetric duplicates), then recurse on the rest.
+  const fillRound = (
+    available: Array<number>,
+    roundMatches: Array<Match>,
+    onComplete: () => boolean
+  ): boolean => {
+    if (available.length < 4) return onComplete();
+    if (++nodes > SEARCH_NODE_LIMIT) return false;
+    const [p, ...rest] = available;
+    for (let i = 0; i < rest.length; i++) {
+      for (let j = i + 1; j < rest.length; j++) {
+        for (let k = j + 1; k < rest.length; k++) {
+          const others = [rest[i], rest[j], rest[k]];
+          const remaining = rest.filter((x) => !others.includes(x));
+          const splits: Array<Match> = [
+            { teamA: [p, others[0]], teamB: [others[1], others[2]] },
+            { teamA: [p, others[1]], teamB: [others[0], others[2]] },
+            { teamA: [p, others[2]], teamB: [others[0], others[1]] },
+          ];
+          for (const m of splits) {
+            if (!allowed(m)) continue;
+            apply(m, 1);
+            roundMatches.push(m);
+            if (fillRound(remaining, roundMatches, onComplete)) return true;
+            roundMatches.pop();
+            apply(m, -1);
+          }
+        }
+      }
+    }
+    return false;
+  };
+
+  const solveRound = (r: number, restedLastRound: Array<number>): boolean => {
+    if (r === totalRounds) return true;
+    for (const resting of candidateRestSets(
+      n,
+      restPerRound,
+      restCount,
+      restedLastRound
+    )) {
+      const restingSet = new Set(resting);
+      for (const player of resting) restCount[player]++;
+      const available = Array.from({ length: n }, (_, i) => i).filter(
+        (i) => !restingSet.has(i)
+      );
+      const roundMatches: Array<Match> = [];
+      rounds.push(roundMatches);
+      if (fillRound(available, roundMatches, () => solveRound(r + 1, resting)))
+        return true;
+      rounds.pop();
+      for (const player of resting) restCount[player]--;
+    }
+    return false;
+  };
+
+  if (!solveRound(0, [])) return null;
+  return rounds.map((round) =>
+    round.map((m) => ({
+      teamA: [...m.teamA] as [number, number],
+      teamB: [...m.teamB] as [number, number],
+    }))
+  );
+}
+
+// Greedy heuristic (original algorithm), used only as a fallback.
+function generateGreedyPairings(
   n: number
 ): Array<Array<{ teamA: [number, number]; teamB: [number, number] }>> {
   // Track partner history (who has been partners with whom)
@@ -180,6 +308,48 @@ function chooseBestSplit(
     }
   }
   return best;
+}
+
+// All fair choices of who sits out next, best first. Fair means: rest counts
+// stay within one of each other afterwards and nobody rests twice in a row.
+// The first entry equals selectRestingPlayers(); the rest give the search
+// room to avoid schedules where the same players keep meeting.
+function candidateRestSets(
+  n: number,
+  restPerRound: number,
+  restCount: Array<number>,
+  restedLastRound: Array<number>
+): Array<Array<number>> {
+  if (restPerRound <= 0) return [[]];
+  const restedLastSet = new Set(restedLastRound);
+  const subsets: Array<Array<number>> = [];
+  const pick = (start: number, chosen: Array<number>) => {
+    if (chosen.length === restPerRound) {
+      subsets.push([...chosen]);
+      return;
+    }
+    for (let i = start; i < n; i++) {
+      chosen.push(i);
+      pick(i + 1, chosen);
+      chosen.pop();
+    }
+  };
+  pick(0, []);
+
+  const fair = subsets.filter((set) => {
+    if (set.some((p) => restedLastSet.has(p))) return false;
+    const after = restCount.map((c, i) => (set.includes(i) ? c + 1 : c));
+    return Math.max(...after) - Math.min(...after) <= 1;
+  });
+  const pool = fair.length > 0 ? fair : subsets;
+  const key = (set: Array<number>) =>
+    set.reduce((sum, p) => sum + restCount[p], 0);
+  return pool.sort((a, b) => {
+    const diff = key(a) - key(b);
+    if (diff !== 0) return diff;
+    for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return a[i] - b[i];
+    return 0;
+  });
 }
 
 // Picks the players who sit out a round. Preference order: fewest rests so far,

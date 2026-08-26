@@ -134,8 +134,22 @@ describe("Pairing Algorithm", () => {
         maxOpponent = Math.max(maxOpponent, matrix[i][j]);
       }
     }
-    // With 7 rounds and greedy algorithm, max opponent repeat should be ≤ 3
-    expect(maxOpponent).toBeLessThanOrEqual(3);
+    // 7 rounds × 2 opponents = 14 opponent slots over 7 others: exactly 2 each
+    expect(maxOpponent).toBe(2);
+  });
+
+  test("nobody faces the same opponent more than twice (4–8 players)", () => {
+    for (const n of [4, 5, 6, 7, 8]) {
+      const rounds = generateAmericanoPairings(n);
+      const opponents = buildOpponentMatrix(n, rounds);
+      const partners = buildPartnerMatrix(n, rounds);
+      for (let i = 0; i < n; i++) {
+        for (let j = i + 1; j < n; j++) {
+          expect(opponents[i][j]).toBeLessThanOrEqual(2);
+          expect(partners[i][j]).toBeLessThanOrEqual(1);
+        }
+      }
+    }
   });
 
   test("algorithm is deterministic", () => {
