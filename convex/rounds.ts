@@ -1,7 +1,7 @@
 import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireGroupAdmin, requireGroupMember } from "./helpers";
-import { generateAmericanoPairings } from "./model/pairings";
+import { americanoRoundCount, generateAmericanoPairings } from "./model/pairings";
 import { generateKnockoutSeeding, resolveKnockoutAdvancement  } from "./model/knockout";
 import { computeStandings } from "./model/standings";
 
@@ -54,7 +54,7 @@ export const generateRounds = mutation({
     const pairings = generateAmericanoPairings(n);
 
     // Determine how many rounds to play
-    const maxRounds = tournament.mode === "cup" ? 5 : n - 1;
+    const maxRounds = tournament.mode === "cup" ? 5 : americanoRoundCount(n);
     const roundCount = Math.min(pairings.length, maxRounds);
 
     for (let r = 0; r < roundCount; r++) {

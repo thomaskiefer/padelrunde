@@ -138,6 +138,22 @@ describe("Pairing Algorithm", () => {
     expect(maxOpponent).toBe(2);
   });
 
+  test("5 players: everyone plays 4 games, partners once, opposes twice", () => {
+    const rounds = generateAmericanoPairings(5);
+    const games = Array(5).fill(0);
+    for (const round of rounds)
+      for (const m of round)
+        for (const p of [...m.teamA, ...m.teamB]) games[p]++;
+    expect(games).toEqual([4, 4, 4, 4, 4]);
+    const partners = buildPartnerMatrix(5, rounds);
+    const opponents = buildOpponentMatrix(5, rounds);
+    for (let i = 0; i < 5; i++)
+      for (let j = i + 1; j < 5; j++) {
+        expect(partners[i][j]).toBe(1);
+        expect(opponents[i][j]).toBe(2);
+      }
+  });
+
   test("nobody faces the same opponent more than twice (4–8 players)", () => {
     for (const n of [4, 5, 6, 7, 8]) {
       const rounds = generateAmericanoPairings(n);
@@ -174,8 +190,8 @@ function restingByRound(
 }
 
 describe("Resting Rotation", () => {
-  test("produces N-1 rounds for 5, 6 and 7 players", () => {
-    expect(generateAmericanoPairings(5).length).toBe(4);
+  test("produces 5 rounds for 5 players and N-1 rounds for 6 and 7", () => {
+    expect(generateAmericanoPairings(5).length).toBe(5);
     expect(generateAmericanoPairings(6).length).toBe(5);
     expect(generateAmericanoPairings(7).length).toBe(6);
   });

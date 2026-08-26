@@ -19,6 +19,13 @@ export function generateAmericanoPairings(
   );
 }
 
+// N-1 rounds lets every player partner everyone once. With 5 players a fifth
+// round is the better deal: everyone then plays exactly 4 games (instead of
+// 3 or 4) and still partners everyone once and opposes everyone exactly twice.
+export function americanoRoundCount(n: number): number {
+  return n === 5 ? 5 : n - 1;
+}
+
 const MAX_PARTNER_REPEATS = 1;
 const MAX_OPPONENT_REPEATS = 2;
 const SEARCH_NODE_LIMIT = 200_000;
@@ -34,7 +41,7 @@ export function searchBalancedPairings(
   maxPartner: number,
   maxOpponent: number
 ): Array<Array<Match>> | null {
-  const totalRounds = n - 1;
+  const totalRounds = americanoRoundCount(n);
   const restPerRound = ((n % 4) + 4) % 4;
   const partnerCount: Array<Array<number>> = Array.from({ length: n }, () =>
     Array(n).fill(0)
@@ -149,7 +156,7 @@ function generateGreedyPairings(
     Array<{ teamA: [number, number]; teamB: [number, number] }>
   > = [];
 
-  const totalRounds = n - 1;
+  const totalRounds = americanoRoundCount(n);
   const restPerRound = ((n % 4) + 4) % 4; // players sitting out each round
   const restCount: Array<number> = Array(n).fill(0);
   let restedLastRound: Array<number> = [];
