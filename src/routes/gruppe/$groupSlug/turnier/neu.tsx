@@ -179,7 +179,7 @@ export function CreateTournament() {
               <p className="text-[10px] text-gray-400 leading-relaxed">
                 {mode === "cup"
                   ? "5 Vorrunden, danach Halbfinale, Finale und Spiel um Platz 3."
-                  : "Jeder spielt mit wechselnden Partnern, 32 Punkte pro Spiel. Bei 5–7 Spielern pausieren pro Runde abwechselnd einzelne."}
+                  : "Jeder spielt mit wechselnden Partnern, 32 Punkte pro Spiel. Bei 5–7 Spielern pausieren pro Runde abwechselnd einzelne; jeder spielt gleich oft."}
               </p>
             </div>
 

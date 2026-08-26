@@ -190,10 +190,20 @@ function restingByRound(
 }
 
 describe("Resting Rotation", () => {
-  test("produces 5 rounds for 5 players and N-1 rounds for 6 and 7", () => {
+  test("produces N rounds for 5, 6 and 7 players", () => {
     expect(generateAmericanoPairings(5).length).toBe(5);
-    expect(generateAmericanoPairings(6).length).toBe(5);
-    expect(generateAmericanoPairings(7).length).toBe(6);
+    expect(generateAmericanoPairings(6).length).toBe(6);
+    expect(generateAmericanoPairings(7).length).toBe(7);
+  });
+
+  test("5, 6 and 7 players all play exactly 4 games", () => {
+    for (const n of [5, 6, 7]) {
+      const games = Array(n).fill(0);
+      for (const round of generateAmericanoPairings(n))
+        for (const m of round)
+          for (const p of [...m.teamA, ...m.teamB]) games[p]++;
+      expect(games).toEqual(Array(n).fill(4));
+    }
   });
 
   test("each round has exactly one match with 4 distinct players", () => {

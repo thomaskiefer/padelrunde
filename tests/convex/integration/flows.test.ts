@@ -1849,7 +1849,7 @@ describe("guest players, renaming and small americanos", () => {
     const rounds = (
       await ownerCtx.query(api.rounds.listByTournament, { tournamentId })
     ).sort((a, b) => a.roundNumber - b.roundNumber);
-    expect(rounds.length).toBe(5);
+    expect(rounds.length).toBe(6);
 
     const restingPerRound: Array<Array<string>> = [];
     for (const round of rounds) {

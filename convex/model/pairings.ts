@@ -19,11 +19,11 @@ export function generateAmericanoPairings(
   );
 }
 
-// N-1 rounds lets every player partner everyone once. With 5 players a fifth
-// round is the better deal: everyone then plays exactly 4 games (instead of
-// 3 or 4) and still partners everyone once and opposes everyone exactly twice.
+// When N is divisible by 4, N-1 rounds let everyone partner everyone once.
+// Otherwise one match per round is played and N rounds is the sweet spot:
+// each player rests the same number of times and plays exactly 4 games.
 export function americanoRoundCount(n: number): number {
-  return n === 5 ? 5 : n - 1;
+  return n % 4 === 0 ? n - 1 : n;
 }
 
 const MAX_PARTNER_REPEATS = 1;
