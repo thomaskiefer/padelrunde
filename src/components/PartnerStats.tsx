@@ -41,7 +41,7 @@ export function PartnerStats({ tournamentId }: Props) {
               }
             >
               <div className="min-w-0">
-                <p className="font-bold text-brand-navy truncate">
+                <p className="font-bold text-brand-navy break-words">
                   {player.displayName}
                 </p>
                 <p className="text-[10px] uppercase tracking-widest font-bold text-gray-400 mt-0.5">
@@ -49,7 +49,7 @@ export function PartnerStats({ tournamentId }: Props) {
                 </p>
               </div>
               <div className={cn(
-                "w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center transition-transform duration-300",
+                "w-8 h-8 shrink-0 rounded-full bg-gray-50 flex items-center justify-center transition-transform duration-300",
                 isExpanded ? "rotate-180 bg-brand-navy text-white" : "text-gray-400 group-hover:bg-gray-100"
               )}>
                 <svg
@@ -69,7 +69,7 @@ export function PartnerStats({ tournamentId }: Props) {
               id={`stats-${player.playerId}`}
               className={cn(
                 "transition-[max-height,opacity] duration-300 ease-in-out overflow-hidden",
-                isExpanded ? "max-h-[500px] opacity-100 border-t border-gray-50 px-4 pt-4 pb-4" : "max-h-0 opacity-0"
+                isExpanded ? "max-h-[900px] opacity-100 border-t border-gray-50 px-4 pt-4 pb-4" : "max-h-0 opacity-0"
               )}
             >
               <div className="space-y-4">
@@ -80,10 +80,10 @@ export function PartnerStats({ tournamentId }: Props) {
                       {player.partners.map((p) => (
                         <div
                           key={p.playerId}
-                          className="bg-brand-teal/5 border border-brand-teal/10 px-3 py-1.5 rounded flex items-center gap-2"
+                          className="bg-brand-teal/5 border border-brand-teal/10 max-w-full px-3 py-1.5 rounded flex items-center gap-2"
                         >
-                          <span className="text-xs font-semibold text-brand-teal truncate max-w-[120px]">{p.displayName}</span>
-                          <span className="font-display text-[10px] text-brand-teal bg-white px-1.5 py-0.5 rounded shadow-sm">{p.count}x</span>
+                          <span className="min-w-0 text-sm font-semibold text-brand-teal break-words">{p.displayName}</span>
+                          <span className="shrink-0 font-display text-[10px] text-brand-teal bg-white px-1.5 py-0.5 rounded shadow-sm">{p.count}x</span>
                         </div>
                       ))}
                     </div>
@@ -97,10 +97,10 @@ export function PartnerStats({ tournamentId }: Props) {
                       {player.opponents.map((o) => (
                         <div
                           key={o.playerId}
-                          className="bg-brand-navy/5 border border-brand-navy/10 px-3 py-1.5 rounded flex items-center gap-2"
+                          className="bg-brand-navy/5 border border-brand-navy/10 max-w-full px-3 py-1.5 rounded flex items-center gap-2"
                         >
-                          <span className="text-xs font-semibold text-brand-navy/60 truncate max-w-[120px]">{o.displayName}</span>
-                          <span className="font-display text-[10px] text-brand-navy/60 bg-white px-1.5 py-0.5 rounded shadow-sm">{o.count}x</span>
+                          <span className="min-w-0 text-sm font-semibold text-brand-navy/70 break-words">{o.displayName}</span>
+                          <span className="shrink-0 font-display text-[10px] text-brand-navy/60 bg-white px-1.5 py-0.5 rounded shadow-sm">{o.count}x</span>
                         </div>
                       ))}
                     </div>

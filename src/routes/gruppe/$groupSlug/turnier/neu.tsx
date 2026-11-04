@@ -230,13 +230,15 @@ export function CreateTournament() {
                   variant={selectedPlayers.has(m._id) ? "brand" : "outline"}
                   size="touchLg"
                   className={cn(
-                    "justify-center",
+                    "h-auto min-h-12 justify-center whitespace-normal break-words text-sm normal-case tracking-normal lg:text-[10px] lg:uppercase lg:tracking-widest",
                     selectedPlayers.has(m._id) && "shadow-md"
                   )}
                   onClick={() => togglePlayer(m._id)}
                 >
-                  {m.displayName}
-                  {m.isGuest && <span className="opacity-60"> · Gast</span>}
+                  <span className="min-w-0">
+                    {m.displayName}
+                    {m.isGuest && <span className="opacity-60"> · Gast</span>}
+                  </span>
                 </Button>
               ))}
             </div>

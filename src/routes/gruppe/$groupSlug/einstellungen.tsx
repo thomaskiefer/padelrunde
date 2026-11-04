@@ -690,7 +690,7 @@ export function GroupSettings() {
                   style={{ animationDelay: `${Math.min(i * 0.05, 0.3)}s` }}
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <span className="font-medium text-sm truncate min-w-0">
+                    <span className="font-semibold text-base text-brand-navy break-words min-w-0">
                       {m.displayName}
                       {isMe && <span className="ml-1.5 text-[10px] uppercase tracking-widest font-bold text-gray-400">(Du)</span>}
                     </span>

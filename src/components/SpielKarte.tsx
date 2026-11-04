@@ -5,7 +5,7 @@ import type { Id } from "../../convex/_generated/dataModel";
 import { Button } from "~/components/ui/button";
 import { Badge } from "~/components/ui/badge";
 import { cn } from "~/lib/utils";
-import { KNOCKOUT_PHASES } from "~/lib/tournament";
+import { KNOCKOUT_PHASES, teamChoiceButtonClass } from "~/lib/tournament";
 
 interface MatchData {
   _id: Id<"matches">;
@@ -99,11 +99,11 @@ export function SpielKarte({
         )}
       </div>
 
-      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4">
+      <div className="grid grid-cols-1 items-center gap-3 lg:grid-cols-[1fr_auto_1fr] lg:gap-4">
         {/* Team A */}
-        <div className="flex flex-col items-end text-right min-w-0">
+        <div className="flex flex-col items-center text-center min-w-0 lg:items-end lg:text-right">
           <p className={cn(
-            "text-sm font-semibold truncate w-full",
+            "text-lg font-semibold w-full break-words lg:text-sm lg:truncate",
             winnerIsA ? "text-brand-navy" : "text-gray-600"
           )}>
             {match.teamANames.join(" & ")}
@@ -114,7 +114,7 @@ export function SpielKarte({
         </div>
 
         {/* Score Display / Inputs */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center justify-center gap-2">
           {isCompleted ? (
             <div className="flex items-center gap-3 bg-gray-50 px-4 py-2 rounded-md border border-gray-100">
               <span className={cn(
@@ -163,9 +163,9 @@ export function SpielKarte({
         </div>
 
         {/* Team B */}
-        <div className="flex flex-col items-start text-left min-w-0">
+        <div className="flex flex-col items-center text-center min-w-0 lg:items-start lg:text-left">
           <p className={cn(
-            "text-sm font-semibold truncate w-full",
+            "text-lg font-semibold w-full break-words lg:text-sm lg:truncate",
             winnerIsB ? "text-brand-navy" : "text-gray-600"
           )}>
             {match.teamBNames.join(" & ")}
@@ -181,11 +181,11 @@ export function SpielKarte({
           <p className="text-[10px] uppercase tracking-widest font-bold text-center text-gray-400">
             K.O.-Unentschieden — Gewinner wählen
           </p>
-          <div className="flex gap-2">
+          <div className="flex flex-col gap-2 lg:flex-row">
             <Button
               variant={winningSide === "A" ? "brand" : "outline"}
               size="touch"
-              className="flex-1 truncate"
+              className={teamChoiceButtonClass}
               onClick={() => setWinningSide("A")}
             >
               {match.teamANames.join(" & ")}
@@ -193,7 +193,7 @@ export function SpielKarte({
             <Button
               variant={winningSide === "B" ? "brand" : "outline"}
               size="touch"
-              className="flex-1 truncate"
+              className={teamChoiceButtonClass}
               onClick={() => setWinningSide("B")}
             >
               {match.teamBNames.join(" & ")}

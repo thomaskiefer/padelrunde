@@ -385,7 +385,7 @@ function RoundSection({
       </div>
       {restingIds.length > 0 && restingNamesResolved && (
         <p className="text-[10px] uppercase tracking-widest font-bold text-gray-400">
-          Pause: <span className="text-brand-navy/60">{restingNames.join(", ")}</span>
+          Pause: <span className="text-base normal-case tracking-normal font-semibold text-brand-navy/70 lg:text-sm">{restingNames.join(", ")}</span>
         </p>
       )}
     </div>

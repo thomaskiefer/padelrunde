@@ -212,15 +212,15 @@ function InternalDashboard() {
                 const isMe = user._id === me._id;
                 return (
                 <div key={user._id} className={cn("bg-white p-4 rounded-xl border border-gray-100 shadow-sm space-y-4", isMe && "ring-2 ring-brand-navy/10")}>
-                  <div className="flex justify-between items-start gap-2">
+                  <div className="space-y-3">
                     <div className="min-w-0">
-                      <p className="font-bold text-brand-navy truncate">
+                      <p className="font-bold text-brand-navy break-words">
                         {user.name}
                         {isMe && <span className="ml-1.5 text-[10px] uppercase tracking-widest font-bold text-gray-400">(Du)</span>}
                       </p>
-                      <p className="text-xs text-gray-400 truncate">{user.email}</p>
+                      <p className="text-sm text-gray-500 break-all">{user.email}</p>
                     </div>
-                    <div className="flex shrink-0 gap-2">
+                    <div className="flex flex-wrap gap-2">
                       {!user.isBootstrapSuperAdmin && (
                         <Button
                           variant={user.isSuperAdmin ? "brandDestructive" : "brandNavy"}
@@ -331,7 +331,7 @@ function InternalDashboard() {
                       </p>
                       <div className="flex flex-wrap gap-2">
                         {group.historicalMembers.map((member) => (
-                          <Badge key={member._id} variant="muted" size="xs">
+                          <Badge key={member._id} variant="muted" size="xs" className="max-w-full whitespace-normal text-xs font-semibold normal-case tracking-normal">
                             {member.displayName} · {member.role === "admin" ? "Admin" : "Mitglied"}
                             {member.hasUser ? "" : " · Benutzer entfernt"}
                           </Badge>

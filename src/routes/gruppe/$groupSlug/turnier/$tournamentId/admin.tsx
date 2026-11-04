@@ -9,7 +9,7 @@ import type { Id } from "../../../../../../convex/_generated/dataModel";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { cn } from "~/lib/utils";
-import { KNOCKOUT_PHASES, phaseLabels } from "~/lib/tournament";
+import { KNOCKOUT_PHASES, phaseLabels, teamChoiceButtonClass } from "~/lib/tournament";
 
 export const Route = createFileRoute(
   "/gruppe/$groupSlug/turnier/$tournamentId/admin"
@@ -426,14 +426,14 @@ function AdminMatchRow({
         )}
       </div>
 
-      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-        <div className="text-right min-w-0">
-          <p className="text-xs font-bold text-brand-navy truncate">
+      <div className="grid grid-cols-1 items-center gap-3 lg:grid-cols-[1fr_auto_1fr]">
+        <div className="text-center min-w-0 lg:text-right">
+          <p className="text-lg font-bold text-brand-navy break-words lg:text-xs lg:truncate">
             {match.teamANames.join(" & ")}
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center justify-center gap-2">
           <input
             type="text"
             inputMode="numeric"
@@ -465,8 +465,8 @@ function AdminMatchRow({
           />
         </div>
 
-        <div className="text-left min-w-0">
-          <p className="text-xs font-bold text-brand-navy truncate">
+        <div className="text-center min-w-0 lg:text-left">
+          <p className="text-lg font-bold text-brand-navy break-words lg:text-xs lg:truncate">
             {match.teamBNames.join(" & ")}
           </p>
         </div>
@@ -475,11 +475,11 @@ function AdminMatchRow({
       {isKnockout && isTie && (
         <div className="bg-gray-50 p-3 rounded-xl space-y-2">
           <p className="text-[10px] uppercase tracking-widest font-bold text-center text-gray-400">Gewinner bestimmen</p>
-          <div className="flex gap-2">
+          <div className="flex flex-col gap-2 lg:flex-row">
             <Button
               variant={winningSide === "A" ? "brand" : "outline"}
               size="touch"
-              className="flex-1 truncate"
+              className={teamChoiceButtonClass}
               onClick={() => {
                 setDirty(true);
                 setWinningSide("A");
@@ -490,7 +490,7 @@ function AdminMatchRow({
             <Button
               variant={winningSide === "B" ? "brand" : "outline"}
               size="touch"
-              className="flex-1 truncate"
+              className={teamChoiceButtonClass}
               onClick={() => {
                 setDirty(true);
                 setWinningSide("B");

@@ -63,18 +63,18 @@ export function LiveTabelle({
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full text-sm min-w-[480px]">
+        <table className="w-full text-sm">
           <caption className="sr-only">Live-Tabelle Rangliste</caption>
           <thead>
             <tr className="text-[10px] uppercase tracking-widest text-gray-400 font-bold border-b border-gray-100 bg-gray-50/50">
-              <th scope="col" className="w-12 py-3 text-left pl-4">#</th>
+              <th scope="col" className="w-10 sm:w-12 py-3 text-left pl-4">#</th>
               <th scope="col" className="py-3 text-left">Spieler</th>
               <th scope="col" className="py-3 text-center w-10">Sp</th>
               <th scope="col" className="py-3 text-center w-12 font-bold text-brand-navy">Pkt</th>
               <th scope="col" className="hidden sm:table-cell py-3 text-center w-10 text-brand-teal">S</th>
               <th scope="col" className="hidden sm:table-cell py-3 text-center w-10 text-brand-red">N</th>
-              <th scope="col" className="py-3 text-center w-16">Diff</th>
-              <th scope="col" className="py-3 text-center w-24 pr-4">Form</th>
+              <th scope="col" className="py-3 text-center w-16 pr-2 sm:pr-0">Diff</th>
+              <th scope="col" className="hidden sm:table-cell py-3 text-center w-24 pr-4">Form</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
@@ -90,8 +90,9 @@ export function LiveTabelle({
                 <td className="py-3 pl-4 font-display text-lg text-brand-navy/30 group-hover:text-brand-red transition-colors">
                   {s.rank}
                 </td>
-                <td className="py-3 font-semibold text-brand-navy truncate max-w-[120px] sm:max-w-none">
+                <td className="py-3 pr-2 text-base sm:text-sm font-semibold text-brand-navy wrap-anywhere">
                   {s.displayName}
+                  <FormDots form={s.form} className="mt-1.5 sm:hidden" />
                 </td>
                 <td className="py-3 text-center text-gray-400 font-medium">{s.matches}</td>
                 <td className="py-3 text-center font-display text-lg text-brand-red">
@@ -101,7 +102,7 @@ export function LiveTabelle({
                 <td className="hidden sm:table-cell py-3 text-center text-gray-500 font-medium">{s.losses}</td>
                 <td
                   className={cn(
-                    "py-3 text-center font-bold",
+                    "py-3 pr-2 sm:pr-0 text-center font-bold",
                     s.diff > 0
                       ? "text-brand-teal"
                       : s.diff < 0
@@ -111,29 +112,41 @@ export function LiveTabelle({
                 >
                   {s.diff > 0 ? `+${s.diff}` : s.diff}
                 </td>
-                <td className="py-3 pr-4">
-                  <div className="flex items-center justify-center gap-1">
-                    {s.form.map((f, idx) => (
-                      <span
-                        key={idx}
-                        className={cn(
-                          "w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold text-white",
-                          f === "W" ? "bg-brand-teal" : f === "L" ? "bg-brand-red" : "bg-gray-300"
-                        )}
-                        title={f === "W" ? "Sieg" : f === "L" ? "Niederlage" : "Unentschieden"}
-                        aria-label={f === "W" ? "Sieg" : f === "L" ? "Niederlage" : "Unentschieden"}
-                      >
-                        {f === "W" ? "S" : f === "L" ? "N" : "U"}
-                      </span>
-                    ))}
-                    {s.form.length === 0 && <span className="text-[10px] text-gray-400 italic font-medium">Noch keine Spiele</span>}
-                  </div>
+                <td className="hidden sm:table-cell py-3 pr-4">
+                  <FormDots form={s.form} className="justify-center" />
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+function FormDots({
+  form,
+  className,
+}: {
+  form: Array<"W" | "L" | "D">;
+  className?: string;
+}) {
+  return (
+    <div className={cn("flex items-center gap-1", className)}>
+      {form.map((f, idx) => (
+        <span
+          key={idx}
+          className={cn(
+            "w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold text-white",
+            f === "W" ? "bg-brand-teal" : f === "L" ? "bg-brand-red" : "bg-gray-300"
+          )}
+          title={f === "W" ? "Sieg" : f === "L" ? "Niederlage" : "Unentschieden"}
+          aria-label={f === "W" ? "Sieg" : f === "L" ? "Niederlage" : "Unentschieden"}
+        >
+          {f === "W" ? "S" : f === "L" ? "N" : "U"}
+        </span>
+      ))}
+      {form.length === 0 && <span className="text-[10px] text-gray-400 italic font-medium">Noch keine Spiele</span>}
     </div>
   );
 }

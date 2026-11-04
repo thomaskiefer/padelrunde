@@ -94,12 +94,12 @@ function BracketMatch({
 
   return (
     <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm space-y-4 hover:border-brand-navy/30 transition-all duration-200">
-      <div className="flex items-center gap-4">
+      <div className="flex flex-col items-center gap-3 lg:flex-row lg:gap-4">
         {/* Team A */}
-        <div className="flex-1 min-w-0 text-right">
-          <div className="flex items-center justify-end gap-1.5">
+        <div className="w-full min-w-0 text-center lg:w-auto lg:flex-1 lg:text-right">
+          <div className="flex items-center justify-center gap-1.5 lg:justify-end">
             <p className={cn(
-              "text-xs sm:text-sm font-bold truncate",
+              "min-w-0 text-lg font-bold break-words lg:text-sm lg:truncate",
               isCompleted && winnerIsA ? "text-brand-navy" : "text-gray-400"
             )}>
               {match.teamANames.join(" & ")}
@@ -128,11 +128,11 @@ function BracketMatch({
         </div>
 
         {/* Team B */}
-        <div className="flex-1 min-w-0 text-left">
-          <div className="flex items-center gap-1.5">
+        <div className="w-full min-w-0 text-center lg:w-auto lg:flex-1 lg:text-left">
+          <div className="flex items-center justify-center gap-1.5 lg:justify-start">
             <MedalBadge type={getMedalType("B")} />
             <p className={cn(
-              "text-xs sm:text-sm font-bold truncate",
+              "min-w-0 text-lg font-bold break-words lg:text-sm lg:truncate",
               isCompleted && winnerIsB ? "text-brand-navy" : "text-gray-400"
             )}>
               {match.teamBNames.join(" & ")}

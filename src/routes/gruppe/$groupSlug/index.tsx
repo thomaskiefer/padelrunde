@@ -245,7 +245,7 @@ function GroupMembers({
           <div
             key={m._id}
             className={cn(
-              "inline-flex items-center gap-2 rounded-full px-1 pr-3 py-1 text-[10px] tracking-widest font-bold uppercase",
+              "inline-flex max-w-full items-center gap-2 rounded-full px-1 pr-3 py-1 text-sm font-semibold lg:text-[10px] lg:leading-normal lg:tracking-widest lg:font-bold lg:uppercase",
               m.role === "admin"
                 ? "bg-brand-red text-white"
                 : "bg-gray-50 border border-gray-200 text-gray-500"
@@ -255,22 +255,22 @@ function GroupMembers({
               <img
                 src={m.avatarUrl}
                 alt=""
-                className="w-6 h-6 rounded-full object-cover"
+                className="w-6 h-6 shrink-0 rounded-full object-cover"
               />
             ) : (
               <span className={cn(
-                "w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold",
+                "w-6 h-6 shrink-0 rounded-full flex items-center justify-center text-[9px] font-bold",
                 m.role === "admin" ? "bg-white/20" : "bg-gray-200 text-gray-400"
               )}>
                 {m.displayName[0].toUpperCase()}
               </span>
             )}
-            {m.displayName}
+            <span className="min-w-0 break-words">{m.displayName}</span>
             {m.role === "admin" && (
-              <span className="opacity-70">Admin</span>
+              <span className="shrink-0 text-[10px] uppercase tracking-widest opacity-70">Admin</span>
             )}
             {m.isGuest && (
-              <span className="opacity-70">Gast</span>
+              <span className="shrink-0 text-[10px] uppercase tracking-widest opacity-70">Gast</span>
             )}
           </div>
         ))}
@@ -325,14 +325,14 @@ function TournamentList({
             )} aria-hidden="true" />
 
             <div className="flex flex-col h-full relative z-10">
-              <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center justify-between gap-2 mb-3">
                 <div className="flex items-center gap-2 min-w-0">
                   <span className={cn(
-                    "w-2 h-2 rounded-full",
+                    "w-2 h-2 shrink-0 rounded-full",
                     statusDotColor[t.status] ?? "bg-gray-300",
                     t.status === "active" && "animate-pulse"
                   )} aria-hidden="true" />
-                  <h3 className="uppercase text-brand-navy truncate text-base group-hover:text-brand-red transition-colors">
+                  <h3 className="min-w-0 uppercase text-brand-navy break-words text-base group-hover:text-brand-red transition-colors md:truncate">
                     {t.name}
                   </h3>
                 </div>
